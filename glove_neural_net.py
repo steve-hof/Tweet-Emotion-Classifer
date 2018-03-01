@@ -21,10 +21,9 @@ def getGlove(filepath_glove):
 	print("Loading GLOVE......")
 	glove_vocab = []
 	embedding_dict = {}
+	embed_vector = []
 	with open(filepath_glove, 'r', encoding='UTF-8') as f:
-		# for line in f.readlines():
-		for i in range(5):
-			line = f.readline()
+		for line in f.readlines():
 			row = line.strip().split(' ')
 			vocab_word = row[0]
 			glove_vocab.append(vocab_word)
@@ -92,6 +91,7 @@ def tokenize(text):
 #### Build dictionaries from the current training documents ####
 #### Words are keys and unique integers are values ####
 def build_dictionaries(words):
+	print("Building tweet vector dictionaries......")
 	#### Gives ordered list of word / count pairs
 	count = collections.Counter(words).most_common()
 	dictionary = dict()
@@ -99,6 +99,7 @@ def build_dictionaries(words):
 		dictionary[word] = len(dictionary) # (increases w/ each iter)
 		#### rev_dict has unique integers as keys, words as values
 		reverse_dictionary = dict(zip(dictionary.values(),dictionary.keys()))
+	print("finished building dictionaries")
 	return dictionary, reverse_dictionary
 
 if __name__ == '__main__':
@@ -108,7 +109,7 @@ if __name__ == '__main__':
 	### Get tweet data
 	dataset, n = getTrainingData(training_path)
 	## make smaller version for now
-	dataset = dataset[:10]
+	#dataset = dataset[:10]
 
 
 	all_tweets_str = ' '.join(dataset['Tweet'].tolist())
@@ -139,15 +140,23 @@ if __name__ == '__main__':
 	dict_as_list = sorted(dictionary.items(), key = lambda x: x[1])
 	embeddings_tmp = []
 
+	print("Beginning to build word vectors........")
 	for i in range(doc_vocab_size):
-	    item = dict_as_list[i][0]
-	    if item in glove_vocab:
-	        embeddings_tmp.append(embedding_dict[item])
-	    else:
-	        rand_num = np.random.uniform(low=-0.2, high=0.2,size=embedding_dim)
-	        embeddings_tmp.append(rand_num)
+		if (i % 5000 == 0 and i != 0):
+			print("still building word vector embeddings....")
+		item = dict_as_list[i][0]
+		if item in glove_vocab:
+			embeddings_tmp.append(embedding_dict[item])
+		else:
+			rand_num = np.random.uniform(low=-0.2, high=0.2,size=embedding_dim)
+			embeddings_tmp.append(rand_num)
  
 	# final embedding array corresponds to dictionary of words in the document
 	embedding = np.asarray(embeddings_tmp)
 
+	with open('training_data/wordVectors', 'wb') as f:
+		pickle.dump(embedding, f)
+
+	with open('training_data/wordsList', 'wb') as f:
+		pickle.dump(dict_as_list, f)
 
