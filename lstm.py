@@ -17,9 +17,9 @@ import pickle
 MAX_DIMENSIONS = 200
 MAX_TWEET_LENGTH = 25
 BATCH_SIZE = 50
-LSTM_UNITS = 64
+LSTM_UNITS = 2
 NUM_CLASSES = 2
-ITERATIONS = 10000
+ITERATIONS = 1000
 FLAGS = re.MULTILINE | re.DOTALL
 
 class Model():
@@ -30,7 +30,7 @@ class Model():
 		self.batchSize = BATCH_SIZE
 		self.test_batchSize = BATCH_SIZE
 		self.lstmUnits = LSTM_UNITS
-		self.numCLasses = NUM_CLASSES
+		self.numClasses = NUM_CLASSES
 		self.iterations = ITERATIONS
 		self.wordsList = wordsList
 		self.wordVectors = wordVectors
@@ -102,7 +102,7 @@ class Model():
 	def _getIDs(self, hasEmotionTweets, noEmotionTweets):
 		numTweets = len(hasEmotionTweets) + len(noEmotionTweets)
 		tweetCounter = 0
-		ids = np.zeros((numTweets, self.max_tweet_length), dtype='float64')
+		ids = np.zeros((numTweets, self.max_tweet_length), dtype='int32')
 		print("Please be patient while we play with massive matrices...")
 		for tweet in hasEmotionTweets:
 			index = 0
@@ -165,11 +165,72 @@ class Model():
 			arr[i] = ids[num-1:num]
 		return arr, labels
 
-	
+	def trainNet(self, num_has_emotion, num_no_emotion, emotion):
+		tf.reset_default_graph()
+
+		### Set up placeholders for input and labels
+		labels = tf.placeholder(tf.float32, [self.batchSize, self.numClasses])
+		input_data = tf.placeholder(tf.int32, [self.batchSize, self.max_tweet_length])
+
+		### Get vector
+		data = tf.Variable(tf.zeros([self.batchSize, self.max_tweet_length, self.max_dimensions]),dtype=tf.float32)
+		data = tf.nn.embedding_lookup(self.wordVectors, input_data)
+
+		### Set up LSTM cell then wrap cell in dropout layer to avoid overfitting
+		lstmCell = tf.contrib.rnn.BasicLSTMCell(self.lstmUnits)
+		lstmCell = tf.contrib.rnn.DropoutWrapper(cell=lstmCell, output_keep_prob=0.75)
+
+		### Combine the 3D input with the LSTM cell and set up network
+		### 'value' is the last hidden state vector
+		value, _ = tf.nn.dynamic_rnn(lstmCell, data, dtype=tf.float32)
+
+		weight = tf.Variable(tf.truncated_normal([self.lstmUnits, self.numClasses]))
+		bias = tf.Variable(tf.constant(0.1, shape=[self.numClasses]))
+		value = tf.transpose(value, [1, 0, 2])
+		last = tf.gather(value, int(value.get_shape()[0]) - 1)
+		prediction = (tf.matmul(last, weight) + bias)
+
+		correctPred = tf.equal(tf.argmax(prediction,1), tf.argmax(labels,1))
+		accuracy = tf.reduce_mean(tf.cast(correctPred, tf.float32))
+
+		### Cross entropy loss with a softmax layer on top
+		### Using Adam for optimizer with 0.0001 learning rate
+		loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=labels))
+		optimizer = tf.train.AdamOptimizer(learning_rate=0.01).minimize(loss)
+
+		sess = tf.InteractiveSession()
+		saver = tf.train.Saver()
+		sess.run(tf.global_variables_initializer())
+
+		# Tensorboard set-up
+		tf.summary.scalar('Training Loss', loss)
+		tf.summary.scalar('Training Accuracy', accuracy)
+		# tf.summary.scalar('Testing Accuracy', test_accuracy)
+		merged = tf.summary.merge_all()
+		logdir = "tensorboard/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + "/"
+		writer = tf.summary.FileWriter(logdir, sess.graph)
+
+		for i in range(self.iterations):
+			#Next Batch of reviews
+			nextBatch, nextBatchLabels = self._getTrainBatch(num_has_emotion, num_no_emotion);
+			sess.run(optimizer, {input_data: nextBatch, labels: nextBatchLabels})
+
+			#Write summary to board
+			if (i % 50 == 0):
+				summary = sess.run(merged, {input_data: nextBatch, labels: nextBatchLabels})
+				writer.add_summary(summary, i)
+
+			#Save network every so often
+			if (i % 1000 == 0 and i != 0):
+				save_path = saver.save(sess, f"models/{emotion}_pretrained_lstm.ckpt", global_step=i)
+				print(f"saved to {save_path}")
+		writer.close()
+
 
 if __name__ == '__main__':
 	with open ('training_data/wordVectors', 'rb') as f:
 		wordVectors = pickle.load(f)
+	wordVectors = wordVectors.astype('float32')
 
 	with open ('training_data/wordsList', 'rb') as f:
 		wordsList_vec = pickle.load(f)
@@ -187,9 +248,10 @@ if __name__ == '__main__':
 
 
 	nn = Model(wordVectors, wordsList)
-	for emotion in emotions:
+	# for emotion in emotions:
 	### add ids to return values later
-		num_has_emotion, num_no_emotion, ids = nn.prepareData(small_dataset, emotion)
+	emotion = 'anger'
+	num_has_emotion, num_no_emotion, ids = nn.prepareData(dataset, emotion)
 
 	print()
 	print()
@@ -197,3 +259,4 @@ if __name__ == '__main__':
 	print()
 	print(ids[0].shape)
 
+	nn.trainNet(num_has_emotion, num_no_emotion, emotion)
