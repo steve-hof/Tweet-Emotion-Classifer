@@ -44,9 +44,9 @@ class Model():
 		noEmotionTweets = self.__cleanTweets(noEmotionTweets)
 		num_has_emotion = len(hasEmotionTweets)
 		num_no_emotion = len(noEmotionTweets)
-		# IDs = self._getIDs(hasEmotionTweets, noEmotionTweets)
+		IDs = self._getIDs(hasEmotionTweets, noEmotionTweets)
 
-		return num_has_emotion, num_no_emotion#, IDs
+		return num_has_emotion, num_no_emotion, IDs
 
 	def __getEmotions(self, dataset, emotion):
 		has_emotion = dataset[dataset[emotion] == 1][['Tweet', emotion]]
@@ -99,7 +99,73 @@ class Model():
 
 	    return text.lower()
 
+	def _getIDs(self, hasEmotionTweets, noEmotionTweets):
+		numTweets = len(hasEmotionTweets) + len(noEmotionTweets)
+		tweetCounter = 0
+		ids = np.zeros((numTweets, self.max_tweet_length), dtype='float64')
+		print("Please be patient while we play with massive matrices...")
+		for tweet in hasEmotionTweets:
+			index = 0
+			split = tweet.split()
+			for word in split:
+				try:
+					ids[tweetCounter][index] = self.wordsList.index(word)
+				except ValueError:
+					ids[tweetCounter][index] = 399999 #Vector for unknown words
+				index += 1
+				if index >= self.max_tweet_length:
+					break
+			tweetCounter += 1
 
+		for tweet in noEmotionTweets:
+			index = 0
+			split = tweet.split()
+			for word in split:
+				try:
+					ids[tweetCounter][index] = self.wordsList.index(word)
+				except ValueError:
+					ids[tweetCounter][index] = 399999 #Vector for unknown words
+				index += 1
+				if index >= self.max_tweet_length:
+					break
+			tweetCounter += 1
+
+		return ids
+
+	def _getTrainBatch(self, has_emotion, no_emotion):
+		labels = []
+		total = has_emotion + no_emotion
+		test_ratio = 0.2
+		num_test = int(total * test_ratio)
+		split_amount = int(num_test * 0.5)
+		arr = np.zeros([self.batchSize, self.max_tweet_length])
+		for i in range(self.batchSize):
+			if (i % 2 == 0): 
+				num = randint(1, has_emotion - split_amount)
+				labels.append([1,0])
+			else:
+				num = randint(has_emotion + split_amount, total)
+				labels.append([0,1])
+			arr[i] = ids[num-1:num]
+		return arr, labels
+
+	def _getTestBatch(self, has_emotion, no_emotion):
+		labels = []
+		total = has_emotion + no_emotion
+		test_ratio = 0.2
+		num_test = int(total * test_ratio)
+		split_amount = int(num_test * 0.5)
+		arr = np.zeros([self.testBatchSize, self.max_tweet_length])
+		for i in range(self.testBatchSize):
+			num = randint(has_emotion - split_amount + 1, has_emotion + split_amount - 1)
+			if (num <= has_emotion):
+				labels.append([1,0])
+			else:
+				labels.append([0,1])
+			arr[i] = ids[num-1:num]
+		return arr, labels
+
+	
 
 if __name__ == '__main__':
 	with open ('training_data/wordVectors', 'rb') as f:
@@ -116,12 +182,18 @@ if __name__ == '__main__':
 	training_file = 'training_data/2018-E-c-En-train.txt'
 	dataset = pd.read_csv(training_file, sep = '\t', quoting = 3, 
 										lineterminator = '\r')
+	small_dataset = dataset[0:10]
 	emotions = dataset.columns.tolist()[2:]
+
 
 	nn = Model(wordVectors, wordsList)
 	for emotion in emotions:
 	### add ids to return values later
-		num_has_emotion, num_no_emotion = nn.prepareData(dataset, emotion)
+		num_has_emotion, num_no_emotion, ids = nn.prepareData(small_dataset, emotion)
 
-
+	print()
+	print()
+	print(ids[0:4])
+	print()
+	print(ids[0].shape)
 
