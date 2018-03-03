@@ -165,9 +165,9 @@ class Model():
 			arr[i] = ids[num-1:num]
 		return arr, labels
 
-	def trainNet(self, num_has_emotion, num_no_emotion, emotion):
+	def trainNet(self, num_has_emotion, num_no_emotion, emotion,):
 		tf.reset_default_graph()
-
+		
 		### Set up placeholders for input and labels
 		with tf.name_scope("Labels") as scope:
 			labels = tf.placeholder(tf.float32, [self.batchSize, self.numClasses])
@@ -180,7 +180,7 @@ class Model():
 			data = tf.nn.embedding_lookup(self.wordVectors, input_data)
 
 		### Set up LSTM cell then wrap cell in dropout layer to avoid overfitting
-		with tf.name_scope("RNN_Layers") as scope:
+		with tf.name_scope("LSTM_Cell") as scope:
 			lstmCell = tf.contrib.rnn.BasicLSTMCell(self.lstmUnits)
 			lstmCell = tf.contrib.rnn.DropoutWrapper(cell=lstmCell, output_keep_prob=0.75)
 
@@ -189,10 +189,10 @@ class Model():
 		with tf.name_scope("RNN_Forward") as scope:
 			value, _ = tf.nn.dynamic_rnn(lstmCell, data, dtype=tf.float32)
 
-		with tf.name_scope("Fully_Connected") as scope:
+		with tf.name_scope("Output_Layer") as scope:
 			weight = tf.Variable(tf.truncated_normal([self.lstmUnits, self.numClasses]), name='weights')
 			bias = tf.Variable(tf.constant(0.1, shape=[self.numClasses]), name='bias')
-			value = tf.transpose(value, [1, 0, 2])
+			value = tf.transpose(value, [1, 0, 2], name='last_lstm')
 			last = tf.gather(value, int(value.get_shape()[0]) - 1)
 			tf.summary.histogram("weights", weight)
 
@@ -241,20 +241,21 @@ class Model():
 			if (i % 200 == 0 and i != 0):
 				save_path = saver.save(sess, f"models/{emotion}_pretrained_lstm.ckpt", global_step=i)
 				print(f"saved to {save_path}")
-		writer.close()
+		
 
 		### testing
-		iterations = 20
-		counter = 0
-		accuracies = []
-		for i in range(iterations):
+		# iterations = 20
+		# counter = 0
+		# accuracies = []
+		# for i in range(iterations):
 			nextBatch, nextBatchLabels = self._getTestBatch(num_has_emotion, num_no_emotion);
 			print("Accuracy for this batch:", (sess.run(accuracy, {input_data: nextBatch, labels: nextBatchLabels})) * 100)
-			accuracies.append(sess.run(accuracy, {input_data: nextBatch, labels: nextBatchLabels}))
-		average_accuracy = np.asarray(accuracies).mean()
-		print(f"Average Accuracy: {average_accuracy}")
-		with open('results/accuracy.txt', 'a') as f:
-			print(f"\nAverage Test Accuarcy for {emotion}: {average_accuracy}\n", file=f)
+			# accuracies.append(sess.run(accuracy, {input_data: nextBatch, labels: nextBatchLabels}))
+		writer.close()	
+		# average_accuracy = np.asarray(accuracies).mean()
+		# print(f"Average Accuracy: {average_accuracy}")
+		# with open('results/accuracy.txt', 'a') as f:
+		# 	print(f"\nAverage Test Accuarcy for {emotion}: {average_accuracy}\n", file=f)
 
 
 if __name__ == '__main__':
@@ -280,7 +281,7 @@ if __name__ == '__main__':
 	nn = Model(wordVectors, wordsList)
 	# for emotion in emotions:
 	### add ids to return values later
-	emotion = 'anger'
+	emotion = 'joy'
 	num_has_emotion, num_no_emotion, ids = nn.prepareData(dataset, emotion)
 
 	nn.trainNet(num_has_emotion, num_no_emotion, emotion)
