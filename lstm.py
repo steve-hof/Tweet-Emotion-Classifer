@@ -242,7 +242,7 @@ class Model():
 		# Tensorflow assumes this directory already exists so we need to create it
 		if not os.path.exists(checkpoint_dir):
 			os.makedirs(checkpoint_dir)
-		saver = tf.train.Saver(tf.all_variables())
+		saver = tf.train.Saver(tf.global_variables())
 
 		sess.run(tf.global_variables_initializer())
 
@@ -270,7 +270,8 @@ class Model():
 			
 
 
-		writer.close()
+		train_summary_writer.close()
+		test_summary_writer.close()
 
 		### testing
 		# iterations = 20
