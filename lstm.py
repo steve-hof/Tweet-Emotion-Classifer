@@ -19,7 +19,7 @@ MAX_TWEET_LENGTH = 25
 BATCH_SIZE = 24
 LSTM_UNITS = 6
 NUM_CLASSES = 2
-ITERATIONS = 20000
+ITERATIONS = 1000
 FLAGS = re.MULTILINE | re.DOTALL
 
 class Model():
@@ -169,42 +169,59 @@ class Model():
 		tf.reset_default_graph()
 
 		### Set up placeholders for input and labels
-		labels = tf.placeholder(tf.float32, [self.batchSize, self.numClasses])
-		input_data = tf.placeholder(tf.int32, [self.batchSize, self.max_tweet_length])
+		with tf.name_scope("Labels") as scope:
+			labels = tf.placeholder(tf.float32, [self.batchSize, self.numClasses])
+		with tf.name_scope("Input") as scope:
+			input_data = tf.placeholder(tf.int32, [self.batchSize, self.max_tweet_length])
 
-		### Get vector
-		data = tf.Variable(tf.zeros([self.batchSize, self.max_tweet_length, self.max_dimensions]),dtype=tf.float32)
-		data = tf.nn.embedding_lookup(self.wordVectors, input_data)
+		### Get embedding vector
+		with tf.name_scope("Embeddings") as scope:
+			data = tf.Variable(tf.zeros([self.batchSize, self.max_tweet_length, self.max_dimensions]),dtype=tf.float32)
+			data = tf.nn.embedding_lookup(self.wordVectors, input_data)
 
 		### Set up LSTM cell then wrap cell in dropout layer to avoid overfitting
-		lstmCell = tf.contrib.rnn.BasicLSTMCell(self.lstmUnits)
-		lstmCell = tf.contrib.rnn.DropoutWrapper(cell=lstmCell, output_keep_prob=0.75)
+		with tf.name_scope("RNN_Layers") as scope:
+			lstmCell = tf.contrib.rnn.BasicLSTMCell(self.lstmUnits)
+			lstmCell = tf.contrib.rnn.DropoutWrapper(cell=lstmCell, output_keep_prob=0.75)
 
 		### Combine the 3D input with the LSTM cell and set up network
 		### 'value' is the last hidden state vector
-		value, _ = tf.nn.dynamic_rnn(lstmCell, data, dtype=tf.float32)
+		with tf.name_scope("RNN_Forward") as scope:
+			value, _ = tf.nn.dynamic_rnn(lstmCell, data, dtype=tf.float32)
 
-		weight = tf.Variable(tf.truncated_normal([self.lstmUnits, self.numClasses]))
-		bias = tf.Variable(tf.constant(0.1, shape=[self.numClasses]))
-		value = tf.transpose(value, [1, 0, 2])
-		last = tf.gather(value, int(value.get_shape()[0]) - 1)
-		prediction = (tf.matmul(last, weight) + bias)
+		with tf.name_scope("Fully_Connected") as scope:
+			weight = tf.Variable(tf.truncated_normal([self.lstmUnits, self.numClasses]), name='weights')
+			bias = tf.Variable(tf.constant(0.1, shape=[self.numClasses]), name='bias')
+			value = tf.transpose(value, [1, 0, 2])
+			last = tf.gather(value, int(value.get_shape()[0]) - 1)
+			tf.summary.histogram("weights", weight)
 
-		correctPred = tf.equal(tf.argmax(prediction,1), tf.argmax(labels,1))
-		accuracy = tf.reduce_mean(tf.cast(correctPred, tf.float32))
+		with tf.name_scope("Predictions") as scope:
+			prediction = (tf.matmul(last, weight) + bias)
+
+		# with tf.name_scope("Prediction / Accuracy") as scope:
+			
 
 		### Cross entropy loss with a softmax layer on top
 		### Using Adam for optimizer with 0.0001 learning rate
-		loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=labels))
-		optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss)
+		with tf.name_scope("Loss_and_Accuracy") as scope:
+			correctPred = tf.equal(tf.argmax(prediction,1), tf.argmax(labels,1))
+			accuracy = tf.reduce_mean(tf.cast(correctPred, tf.float32))
+			loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=labels))
+			tf.summary.scalar("Training Loss", loss)
+			tf.summary.scalar('Training Accuracy', accuracy)
+
+		with tf.name_scope("Training") as scope:
+			optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss)
+			
 
 		sess = tf.InteractiveSession()
 		saver = tf.train.Saver()
 		sess.run(tf.global_variables_initializer())
 
-		# Tensorboard set-up
-		tf.summary.scalar('Training Loss', loss)
-		tf.summary.scalar('Training Accuracy', accuracy)
+		### Tensorboard set-up
+		# tf.summary.scalar('Training Loss', loss)
+		# tf.summary.scalar('Training Accuracy', accuracy)
 		# tf.summary.scalar('Testing Accuracy', test_accuracy)
 		merged = tf.summary.merge_all()
 		logdir = "tensorboard/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + "/"
@@ -216,12 +233,12 @@ class Model():
 			sess.run(optimizer, {input_data: nextBatch, labels: nextBatchLabels})
 
 			#Write summary to board
-			if (i % 50 == 0):
+			if (i % 20 == 0):
 				summary = sess.run(merged, {input_data: nextBatch, labels: nextBatchLabels})
 				writer.add_summary(summary, i)
 
 			#Save network every so often
-			if (i % 5000 == 0 and i != 0):
+			if (i % 200 == 0 and i != 0):
 				save_path = saver.save(sess, f"models/{emotion}_pretrained_lstm.ckpt", global_step=i)
 				print(f"saved to {save_path}")
 		writer.close()

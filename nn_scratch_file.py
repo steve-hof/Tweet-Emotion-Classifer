@@ -20,7 +20,7 @@ class NNClassifier():
         self.testBatchSize = 24
         self.lstmUnits = 64 # was 64
         self.numClasses = 2
-        self.iterations = 6000 # was 100,000
+        self.iterations = 500 # was 100,000
         
         # Get word2vec stuff
         self.wordsList = np.load('training_data/wordsList.npy')
@@ -163,7 +163,7 @@ class NNClassifier():
         # Tensorboard set-up
         tf.summary.scalar('Training Loss', loss)
         tf.summary.scalar('Training Accuracy', accuracy)
-        tf.summary.scalar('Testing Accuracy', test_accuracy)
+        # tf.summary.scalar('Testing Accuracy', test_accuracy)
         merged = tf.summary.merge_all()
         logdir = "tensorboard/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + "/"
         writer = tf.summary.FileWriter(logdir, sess.graph)
@@ -179,7 +179,7 @@ class NNClassifier():
                 writer.add_summary(summary, i)
 
             #Save network every so often
-            if (i % 1000 == 0 and i != 0):
+            if (i % 100 == 0 and i != 0):
                 save_path = saver.save(sess, f"models/{emotion}_pretrained_lstm.ckpt", global_step=i)
                 print(f"saved to {save_path}")
         writer.close()
@@ -264,8 +264,9 @@ if __name__ == '__main__':
     ############################################################
     #### Calcuate Tweet Vector IDs from word2vec Embeddings ####
     ############################################################
-    for emotion in emotions:
-        num_has_emotion, num_no_emotion, ids = nn.prepareData(dataset, emotion)
+    # for emotion in emotions:
+    emotion = 'joy'
+    num_has_emotion, num_no_emotion, ids = nn.prepareData(dataset, emotion)
     
     
     ###############################################
@@ -278,7 +279,7 @@ if __name__ == '__main__':
     #### Train Neural Network and Test Accuracy on Test Data ####
     #############################################################
     
-        nn.trainNet(num_has_emotion, num_no_emotion, emotion)
+    nn.trainNet(num_has_emotion, num_no_emotion, emotion)
     
     #####################################################
     #### Use this to run pretrained net on test data ####
