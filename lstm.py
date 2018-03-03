@@ -16,10 +16,10 @@ import pickle
 
 MAX_DIMENSIONS = 200
 MAX_TWEET_LENGTH = 25
-BATCH_SIZE = 50
-LSTM_UNITS = 2
+BATCH_SIZE = 24
+LSTM_UNITS = 6
 NUM_CLASSES = 2
-ITERATIONS = 1000
+ITERATIONS = 20000
 FLAGS = re.MULTILINE | re.DOTALL
 
 class Model():
@@ -28,7 +28,7 @@ class Model():
 		self.max_dimensions = MAX_DIMENSIONS
 		self.max_tweet_length = MAX_TWEET_LENGTH
 		self.batchSize = BATCH_SIZE
-		self.test_batchSize = BATCH_SIZE
+		self.testBatchSize = BATCH_SIZE
 		self.lstmUnits = LSTM_UNITS
 		self.numClasses = NUM_CLASSES
 		self.iterations = ITERATIONS
@@ -196,7 +196,7 @@ class Model():
 		### Cross entropy loss with a softmax layer on top
 		### Using Adam for optimizer with 0.0001 learning rate
 		loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=labels))
-		optimizer = tf.train.AdamOptimizer(learning_rate=0.01).minimize(loss)
+		optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss)
 
 		sess = tf.InteractiveSession()
 		saver = tf.train.Saver()
@@ -221,10 +221,23 @@ class Model():
 				writer.add_summary(summary, i)
 
 			#Save network every so often
-			if (i % 1000 == 0 and i != 0):
+			if (i % 5000 == 0 and i != 0):
 				save_path = saver.save(sess, f"models/{emotion}_pretrained_lstm.ckpt", global_step=i)
 				print(f"saved to {save_path}")
 		writer.close()
+
+		### testing
+		iterations = 20
+		counter = 0
+		accuracies = []
+		for i in range(iterations):
+			nextBatch, nextBatchLabels = self._getTestBatch(num_has_emotion, num_no_emotion);
+			print("Accuracy for this batch:", (sess.run(accuracy, {input_data: nextBatch, labels: nextBatchLabels})) * 100)
+			accuracies.append(sess.run(accuracy, {input_data: nextBatch, labels: nextBatchLabels}))
+		average_accuracy = np.asarray(accuracies).mean()
+		print(f"Average Accuracy: {average_accuracy}")
+		with open('results/accuracy.txt', 'a') as f:
+			print(f"\nAverage Test Accuarcy for {emotion}: {average_accuracy}\n", file=f)
 
 
 if __name__ == '__main__':
@@ -243,7 +256,7 @@ if __name__ == '__main__':
 	training_file = 'training_data/2018-E-c-En-train.txt'
 	dataset = pd.read_csv(training_file, sep = '\t', quoting = 3, 
 										lineterminator = '\r')
-	small_dataset = dataset[0:10]
+	# small_dataset = dataset[0:10]
 	emotions = dataset.columns.tolist()[2:]
 
 
@@ -252,11 +265,5 @@ if __name__ == '__main__':
 	### add ids to return values later
 	emotion = 'anger'
 	num_has_emotion, num_no_emotion, ids = nn.prepareData(dataset, emotion)
-
-	print()
-	print()
-	print(ids[0:4])
-	print()
-	print(ids[0].shape)
 
 	nn.trainNet(num_has_emotion, num_no_emotion, emotion)
