@@ -8,10 +8,9 @@ import matplotlib.pyplot as plt
 import re
 import tensorflow as tf
 import datetime
-import os
 from tensorflow.contrib import rnn
 from os import listdir
-from os.path import isfile, join, abspath
+from os.path import isfile, join
 from random import randint
 import pickle
 
@@ -209,81 +208,53 @@ class Model():
 			correctPred = tf.equal(tf.argmax(prediction,1), tf.argmax(labels,1))
 			accuracy = tf.reduce_mean(tf.cast(correctPred, tf.float32))
 			loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=labels))
+			tf.summary.scalar("Training Loss", loss)
+			tf.summary.scalar('Training Accuracy', accuracy)
 
 		with tf.name_scope("Training") as scope:
 			optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss)
-		
-		
+			
+
 		sess = tf.InteractiveSession()
-		# saver = tf.train.Saver()
-
-		### Output directory for models and summaries
-		timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-		logdir = os.path.abspath(os.path.join(os.path.curdir, "tensorboard", timestamp))
-		print(f"Writing to {logdir}")
-
-		### Summaries for loss and accuracy
-		loss_summary = tf.summary.scalar("Training Loss", loss)
-		acc_summary = tf.summary.scalar('Training Accuracy', accuracy)
-
-		### Training summaries
-		train_summary_op = tf.summary.merge([loss_summary, acc_summary])
-		train_summary_dir = os.path.join(logdir, "summaries", "train")
-		train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph)		
-
-		### Testing summaries
-		test_summary_op = tf.summary.merge([loss_summary, acc_summary])
-		test_summary_dir = os.path.join(logdir, "summaries", "dev")
-		test_summary_writer = tf.summary.FileWriter(test_summary_dir, sess.graph)
-		
-		# Checkpointing
-		checkpoint_dir = os.path.abspath(os.path.join(logdir, "checkpoints"))
-		checkpoint_prefix = os.path.join(checkpoint_dir, "model")
-		# Tensorflow assumes this directory already exists so we need to create it
-		if not os.path.exists(checkpoint_dir):
-			os.makedirs(checkpoint_dir)
-		saver = tf.train.Saver(tf.all_variables())
-
+		saver = tf.train.Saver()
 		sess.run(tf.global_variables_initializer())
 
-		# writer = tf.summary.FileWriter(logdir, sess.graph)
+		### Tensorboard set-up
+		# tf.summary.scalar('Training Loss', loss)
+		# tf.summary.scalar('Training Accuracy', accuracy)
+		# tf.summary.scalar('Testing Accuracy', test_accuracy)
+		merged = tf.summary.merge_all()
+		logdir = "tensorboard/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + "/"
+		writer = tf.summary.FileWriter(logdir, sess.graph)
 
 		for i in range(self.iterations):
 			#Next Batch of reviews
-			nextTrainBatch, nextTrainBatchLabels = self._getTrainBatch(num_has_emotion, num_no_emotion);
-			sess.run(optimizer, {input_data: nextTrainBatch, labels: nextTrainBatchLabels})
+			nextBatch, nextBatchLabels = self._getTrainBatch(num_has_emotion, num_no_emotion);
+			sess.run(optimizer, {input_data: nextBatch, labels: nextBatchLabels})
 
-			#Write training summary to board
+			#Write summary to board
 			if (i % 20 == 0):
-				summary = sess.run(train_summary_op, {input_data: nextTrainBatch, labels: nextTrainBatchLabels})
-				train_summary_writer.add_summary(summary, i)
+				summary = sess.run(merged, {input_data: nextBatch, labels: nextBatchLabels})
+				writer.add_summary(summary, i)
 
-			### Write testing summary to board
-			if (i % 21 == 0):
-				nextTestBatch, nextTestBatchLabels = self._getTestBatch(num_has_emotion, num_no_emotion);
-				testSummary = sess.run(test_summary_op, {input_data: nextTestBatch, labels: nextTestBatchLabels})
-				test_summary_writer.add_summary(testSummary, i)
 			#Save network every so often
 			if (i % 200 == 0 and i != 0):
 				save_path = saver.save(sess, f"models/{emotion}_pretrained_lstm.ckpt", global_step=i)
 				print(f"saved to {save_path}")
-			
-
-
 		writer.close()
 
 		### testing
-		# iterations = 20
-		# counter = 0
-		# accuracies = []
-		# for i in range(iterations):
-		# 	nextBatch, nextBatchLabels = self._getTestBatch(num_has_emotion, num_no_emotion);
-		# 	print("Accuracy for this batch:", (sess.run(accuracy, {input_data: nextBatch, labels: nextBatchLabels})) * 100)
-		# 	accuracies.append(sess.run(accuracy, {input_data: nextBatch, labels: nextBatchLabels}))
-		# average_accuracy = np.asarray(accuracies).mean()
-		# print(f"Average Accuracy: {average_accuracy}")
-		# with open('results/accuracy.txt', 'a') as f:
-		# 	print(f"\nAverage Test Accuarcy for {emotion}: {average_accuracy}\n", file=f)
+		iterations = 20
+		counter = 0
+		accuracies = []
+		for i in range(iterations):
+			nextBatch, nextBatchLabels = self._getTestBatch(num_has_emotion, num_no_emotion);
+			print("Accuracy for this batch:", (sess.run(accuracy, {input_data: nextBatch, labels: nextBatchLabels})) * 100)
+			accuracies.append(sess.run(accuracy, {input_data: nextBatch, labels: nextBatchLabels}))
+		average_accuracy = np.asarray(accuracies).mean()
+		print(f"Average Accuracy: {average_accuracy}")
+		with open('results/accuracy.txt', 'a') as f:
+			print(f"\nAverage Test Accuarcy for {emotion}: {average_accuracy}\n", file=f)
 
 
 if __name__ == '__main__':
