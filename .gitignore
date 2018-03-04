@@ -75,6 +75,11 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 
+# tensorboard stuff
+tensorboard/
+results/
+models/
+
 # pyenv
 .python-version
 

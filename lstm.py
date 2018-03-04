@@ -18,9 +18,9 @@ import pickle
 MAX_DIMENSIONS = 200
 MAX_TWEET_LENGTH = 25
 BATCH_SIZE = 24
-LSTM_UNITS = 6
+LSTM_UNITS = 48
 NUM_CLASSES = 2
-ITERATIONS = 1000
+ITERATIONS = 10000
 FLAGS = re.MULTILINE | re.DOTALL
 
 class Model():
@@ -190,7 +190,7 @@ class Model():
 		with tf.name_scope("RNN_Forward") as scope:
 			value, _ = tf.nn.dynamic_rnn(lstmCell, data, dtype=tf.float32)
 
-		with tf.name_scope("Output_Layer") as scope:
+		with tf.name_scope("Fully_Connected") as scope:
 			weight = tf.Variable(tf.truncated_normal([self.lstmUnits, self.numClasses]), name='weights')
 			bias = tf.Variable(tf.constant(0.1, shape=[self.numClasses]), name='bias')
 			value = tf.transpose(value, [1, 0, 2], name='last_lstm')
@@ -213,38 +213,39 @@ class Model():
 		with tf.name_scope("Training") as scope:
 			optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss)
 		
-		
 		sess = tf.InteractiveSession()
-		# saver = tf.train.Saver()
-
+		saver = tf.train.Saver() #(tf.global_variables())
+		sess.run(tf.global_variables_initializer())
+		
 		### Output directory for models and summaries
 		timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 		logdir = os.path.abspath(os.path.join(os.path.curdir, "tensorboard", timestamp))
 		print(f"Writing to {logdir}")
 
 		### Summaries for loss and accuracy
-		loss_summary = tf.summary.scalar("Training Loss", loss)
-		acc_summary = tf.summary.scalar('Training Accuracy', accuracy)
+		# loss_summary = tf.summary.scalar("Loss", loss)
+		acc_summary = tf.summary.scalar('Accuracy', accuracy)
 
 		### Training summaries
-		train_summary_op = tf.summary.merge([loss_summary, acc_summary])
+		# train_summary_op = tf.summary.merge([loss_summary, acc_summary])
 		train_summary_dir = os.path.join(logdir, "summaries", "train")
 		train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph)		
 
 		### Testing summaries
-		test_summary_op = tf.summary.merge([loss_summary, acc_summary])
-		test_summary_dir = os.path.join(logdir, "summaries", "dev")
+		# test_summary_op = tf.summary.merge([loss_summary, acc_summary])
+		test_summary_dir = os.path.join(logdir, "summaries", "test")
 		test_summary_writer = tf.summary.FileWriter(test_summary_dir, sess.graph)
 		
+		summary_op = tf.summary.merge_all()
+		# summary_op = tf.summary.merge([train_summary_op, test_summary_op])
 		# Checkpointing
 		checkpoint_dir = os.path.abspath(os.path.join(logdir, "checkpoints"))
 		checkpoint_prefix = os.path.join(checkpoint_dir, "model")
 		# Tensorflow assumes this directory already exists so we need to create it
 		if not os.path.exists(checkpoint_dir):
 			os.makedirs(checkpoint_dir)
-		saver = tf.train.Saver(tf.global_variables())
 
-		sess.run(tf.global_variables_initializer())
+		
 
 		# writer = tf.summary.FileWriter(logdir, sess.graph)
 
@@ -254,17 +255,18 @@ class Model():
 			sess.run(optimizer, {input_data: nextTrainBatch, labels: nextTrainBatchLabels})
 
 			#Write training summary to board
-			if (i % 20 == 0):
-				summary = sess.run(train_summary_op, {input_data: nextTrainBatch, labels: nextTrainBatchLabels})
+			if (i % 200 == 0):
+				summary = sess.run(summary_op, {input_data: nextTrainBatch, labels: nextTrainBatchLabels})
 				train_summary_writer.add_summary(summary, i)
+				train_summary_writer.flush()
 
-			### Write testing summary to board
-			if (i % 21 == 0):
 				nextTestBatch, nextTestBatchLabels = self._getTestBatch(num_has_emotion, num_no_emotion);
-				testSummary = sess.run(test_summary_op, {input_data: nextTestBatch, labels: nextTestBatchLabels})
+				testSummary = sess.run(summary_op, {input_data: nextTestBatch, labels: nextTestBatchLabels})
 				test_summary_writer.add_summary(testSummary, i)
+				test_summary_writer.flush()
+			
 			#Save network every so often
-			if (i % 200 == 0 and i != 0):
+			if (i % 1000 == 0 and i != 0):
 				save_path = saver.save(sess, f"models/{emotion}_pretrained_lstm.ckpt", global_step=i)
 				print(f"saved to {save_path}")
 			
@@ -310,7 +312,7 @@ if __name__ == '__main__':
 	nn = Model(wordVectors, wordsList)
 	# for emotion in emotions:
 	### add ids to return values later
-	emotion = 'joy'
+	emotion = 'anger'
 	num_has_emotion, num_no_emotion, ids = nn.prepareData(dataset, emotion)
 
 	nn.trainNet(num_has_emotion, num_no_emotion, emotion)
