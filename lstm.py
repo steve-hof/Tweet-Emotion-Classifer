@@ -18,9 +18,10 @@ import pickle
 MAX_DIMENSIONS = 200
 MAX_TWEET_LENGTH = 25
 BATCH_SIZE = 24
-LSTM_UNITS = 48
+LSTM_UNITS = 72
 NUM_CLASSES = 2
-ITERATIONS = 10000
+ITERATIONS = 20000
+LEARNING_RATE = 1e-4
 FLAGS = re.MULTILINE | re.DOTALL
 
 class Model():
@@ -35,6 +36,7 @@ class Model():
 		self.iterations = ITERATIONS
 		self.wordsList = wordsList
 		self.wordVectors = wordVectors
+		self.learning_rate = LEARNING_RATE
 
 	def prepareData(self, dataset, emotion):
 		dataset = dataset.drop(['ID'], axis=1)
@@ -196,6 +198,8 @@ class Model():
 			value = tf.transpose(value, [1, 0, 2], name='last_lstm')
 			last = tf.gather(value, int(value.get_shape()[0]) - 1)
 			tf.summary.histogram("weights", weight)
+			tf.summary.histogram("biases", bias)
+
 
 		with tf.name_scope("Predictions") as scope:
 			prediction = (tf.matmul(last, weight) + bias)
@@ -211,7 +215,7 @@ class Model():
 			loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=labels))
 
 		with tf.name_scope("Training") as scope:
-			optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss)
+			optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(loss)
 		
 		sess = tf.InteractiveSession()
 		saver = tf.train.Saver() #(tf.global_variables())
@@ -247,7 +251,6 @@ class Model():
 
 		
 
-		# writer = tf.summary.FileWriter(logdir, sess.graph)
 
 		for i in range(self.iterations):
 			#Next Batch of reviews
@@ -288,6 +291,9 @@ class Model():
 		# with open('results/accuracy.txt', 'a') as f:
 		# 	print(f"\nAverage Test Accuarcy for {emotion}: {average_accuracy}\n", file=f)
 
+# def make_hparam_string(lr, num_cells):
+# 	hparam_str = f"lr:{lr}, cells:{num_cells}"
+# 	return hparam_str
 
 if __name__ == '__main__':
 	with open ('training_data/wordVectors', 'rb') as f:
@@ -314,5 +320,7 @@ if __name__ == '__main__':
 	### add ids to return values later
 	emotion = 'anger'
 	num_has_emotion, num_no_emotion, ids = nn.prepareData(dataset, emotion)
-
+	# for learning_rate in [1e-3, 1e-4, 1e-5]:
+	# 	for num_cells in [12, 64]:
+	# 		hparam_str = make_hparam_string(learning_rate, num_cells)
 	nn.trainNet(num_has_emotion, num_no_emotion, emotion)
