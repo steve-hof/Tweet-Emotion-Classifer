@@ -22,8 +22,9 @@ MAX_TWEET_LENGTH = 25
 BATCH_SIZE = 24
 LSTM_UNITS = 512
 NUM_CLASSES = 2
-ITERATIONS = 10
+ITERATIONS = 50000
 LEARNING_RATE = 1e-4
+NUM_LAYERS = 
 FLAGS = re.MULTILINE | re.DOTALL
 """
 Clean tweets and create tags for often used
@@ -149,8 +150,10 @@ def main():
 
 	### Construct final vocab
 	weights = np.asarray(weights, dtype=np.float32)
+	print(f"weights shape = {weights.shape}")
+	print(f"here are some weights: {weights[:4]}")
 	VOCAB_SIZE = weights.shape[0]
-
+	print(f"vocab_size = {VOCAB_SIZE}")
 
 
 	###############################################################
@@ -170,9 +173,9 @@ def main():
 	num_has_emo, num_no_emo = len(has_emo_tweets), len(no_emo_tweets)
 	total_num_tweets = num_has_emo + num_no_emo
 
-	##############################################################################
-	### Now we need to turn our tweets into vectors representing their indices ###
-	##############################################################################
+	###################################################
+	### Now we need to turn our tweets into vectors ###
+	###################################################
 
 	ids = np.zeros((total_num_tweets, MAX_TWEET_LENGTH), dtype='int32')
 	tweetCounter = 0
@@ -183,7 +186,7 @@ def main():
 			try:
 				ids[tweetCounter][indexCounter] = word2idx[word]
 			except KeyError:
-				ids[tweetCounter][indexCounter] = word2idx['UNK'] 
+				ids[tweetCounter][indexCounter] = UNKNOWN_TOKEN 
 			indexCounter += 1
 			if indexCounter >= MAX_TWEET_LENGTH:
 				break
@@ -224,13 +227,15 @@ def main():
 
 	### Set up LSTM cell then wrap cell in dropout layer to avoid overfitting
 	with tf.name_scope("LSTM_Cell") as scope:
-		lstmCell = tf.contrib.rnn.BasicLSTMCell(LSTM_UNITS)
-		lstmCell = tf.contrib.rnn.DropoutWrapper(cell=lstmCell, output_keep_prob=0.75)
+		lstm_cell = tf.contrib.rnn.BasicLSTMCell(LSTM_UNITS)
+		stacked_lstm_cell = tf.contrib.rnn.MultiRNNCell([lstm_cell for _ in range(NUM_LAYERS)])
+		initial_state = stacked_lstm_cell.zero_state(BATCH_SIZE, tf.float32)
+		lstm_cell = tf.contrib.rnn.DropoutWrapper(cell=lstm_cell, output_keep_prob=0.75)
 
 	### Combine the 3D input with the LSTM cell and set up network
 	### 'value' is the last hidden state vector
 	with tf.name_scope("RNN_Forward") as scope:
-		value, _ = tf.nn.dynamic_rnn(lstmCell, data, dtype=tf.float32)
+		value, _ = tf.nn.dynamic_rnn(lstm_cell, data, dtype=tf.float32)
 
 	with tf.name_scope("Fully_Connected") as scope:
 		weight = tf.Variable(tf.truncated_normal([LSTM_UNITS, NUM_CLASSES]), name='weights')
@@ -313,7 +318,7 @@ def main():
 			save_path = saver.save(sess, f"models/{emotion}_pretrained_lstm.ckpt", global_step=i)
 			print(f"saved to {save_path}")
 		
-
+		
 
 	train_summary_writer.close()
 	test_summary_writer.close()
