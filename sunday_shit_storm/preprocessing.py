@@ -60,3 +60,5 @@ print(firstSentence)
 
 with tf.Session() as sess:
 	print(tf.nn.embedding_lookup(w2v,firstSentence).eval().shape)
+
+	

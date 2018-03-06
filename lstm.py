@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 import collections
 import random
 from scipy import spatial
@@ -20,7 +21,7 @@ MAX_TWEET_LENGTH = 25
 BATCH_SIZE = 24
 LSTM_UNITS = 72
 NUM_CLASSES = 2
-ITERATIONS = 20000
+ITERATIONS = 100
 LEARNING_RATE = 1e-4
 FLAGS = re.MULTILINE | re.DOTALL
 
@@ -78,29 +79,29 @@ class Model():
 	    return text.lower() + " <allcaps>"
 
 	def tokenize(self, text):
-	    eyes = r"[8:=;]"
-	    nose = r"['`\-]?"
-	    
-	    def re_sub(self, pattern, repl):
-	        return re.sub(pattern, repl, text, flags=FLAGS)
-	    
-	    text = re_sub(self, r"https?:\/\/\S+\b|www\.(\w+\.)+\S*", "<url>")
-	    text = re_sub(self, r"@\w+", "<user>")
-	    text = re_sub(self, r"{}{}[)dD]+|[)dD]+{}{}".format(eyes, nose, nose, eyes), "<smile>")
-	    text = re_sub(self, r"{}{}p+".format(eyes, nose), "<lolface>")
-	    text = re_sub(self, r"{}{}\(+|\)+{}{}".format(eyes, nose, nose, eyes), "<sadface>")
-	    text = re_sub(self, r"{}{}[\/|l*]".format(eyes, nose), "<neutralface>")
-	    text = re_sub(self, r"/"," / ")
-	    text = re_sub(self, r"<3","<heart>")
-	    text = re_sub(self, r"[-+]?[.\d]*[\d]+[:,.\d]*", "<number>")
-	    text = re_sub(self, r"#\S+", '<hashtag>')
-	    text = re_sub(self, r"([!?.]){2,}", r"\1 <repeat>")
-	    text = re_sub(self, r"\b(\S*?)(.)\2{2,}\b", r"\1\2 <elong>")
-	    
-	    #text = re_sub(r"([^a-z0-9()<>'`\-]){2,}", allcaps)
-	    text = re_sub(self, r"([A-Z]){2,}", self.allcaps)
+		eyes = r"[8:=;]"
+		nose = r"['`\-]?"
 
-	    return text.lower()
+		def re_sub(self, pattern, repl):
+		    return re.sub(pattern, repl, text, flags=FLAGS)
+
+		text = re_sub(self, r"https?:\/\/\S+\b|www\.(\w+\.)+\S*", "<url>")
+		text = re_sub(self, r"@\w+", "<user>")
+		text = re_sub(self, r"{}{}[)dD]+|[)dD]+{}{}".format(eyes, nose, nose, eyes), "<smile>")
+		text = re_sub(self, r"{}{}p+".format(eyes, nose), "<lolface>")
+		text = re_sub(self, r"{}{}\(+|\)+{}{}".format(eyes, nose, nose, eyes), "<sadface>")
+		text = re_sub(self, r"{}{}[\/|l*]".format(eyes, nose), "<neutralface>")
+		text = re_sub(self, r"/"," / ")
+		text = re_sub(self, r"<3","<heart>")
+		text = re_sub(self, r"[-+]?[.\d]*[\d]+[:,.\d]*", "<number>")
+		text = re_sub(self, r"#\S+", '<hashtag>')
+		text = re_sub(self, r"([!?.]){2,}", r"\1 <repeat>")
+		text = re_sub(self, r"\b(\S*?)(.)\2{2,}\b", r"\1\2 <elong>")
+
+		#text = re_sub(r"([^a-z0-9()<>'`\-]){2,}", allcaps)
+		text = re_sub(self, r"([A-Z]){2,}", self.allcaps)
+
+		return text.lower()
 
 	def _getIDs(self, hasEmotionTweets, noEmotionTweets):
 		numTweets = len(hasEmotionTweets) + len(noEmotionTweets)
@@ -176,7 +177,10 @@ class Model():
 			labels = tf.placeholder(tf.float32, [self.batchSize, self.numClasses])
 		with tf.name_scope("Input") as scope:
 			input_data = tf.placeholder(tf.int32, [self.batchSize, self.max_tweet_length])
-
+		
+		print(f"word vectors shape: {wordVectors.shape}")
+		print(f"look at some wordVectors: {self.wordVectors[:4]}")
+		
 		### Get embedding vector
 		with tf.name_scope("Embeddings") as scope:
 			data = tf.Variable(tf.zeros([self.batchSize, self.max_tweet_length, self.max_dimensions]),dtype=tf.float32)

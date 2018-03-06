@@ -22,7 +22,7 @@ MAX_TWEET_LENGTH = 25
 BATCH_SIZE = 24
 LSTM_UNITS = 72
 NUM_CLASSES = 2
-ITERATIONS = 20000
+ITERATIONS = 15000
 LEARNING_RATE = 1e-4
 FLAGS = re.MULTILINE | re.DOTALL
 """
@@ -79,14 +79,14 @@ def separateOnEmo(data, emotion):
 		no_emo.append(tokenize(tweet))
 	return has_emotion, no_emotion
 
-def _getTrainBatch(has_emotion, no_emotion):
+def _getTrainBatch(has_emotion, no_emotion, ids):
 	labels = []
 	total = has_emotion + no_emotion
 	test_ratio = 0.2
 	num_test = int(total * test_ratio)
 	split_amount = int(num_test * 0.5)
-	arr = np.zeros([batchSize, max_tweet_length])
-	for i in range(batchSize):
+	arr = np.zeros([BATCH_SIZE, MAX_TWEET_LENGTH])
+	for i in range(BATCH_SIZE):
 		if (i % 2 == 0): 
 			num = randint(1, has_emotion - split_amount)
 			labels.append([1,0])
@@ -96,14 +96,14 @@ def _getTrainBatch(has_emotion, no_emotion):
 		arr[i] = ids[num-1:num]
 	return arr, labels
 
-def _getTestBatch(has_emotion, no_emotion):
+def _getTestBatch(has_emotion, no_emotion, ids):
 	labels = []
 	total = has_emotion + no_emotion
 	test_ratio = 0.2
 	num_test = int(total * test_ratio)
 	split_amount = int(num_test * 0.5)
-	arr = np.zeros([testBatchSize, max_tweet_length])
-	for i in range(testBatchSize):
+	arr = np.zeros([BATCH_SIZE, MAX_TWEET_LENGTH])
+	for i in range(BATCH_SIZE):
 		num = randint(has_emotion - split_amount + 1, has_emotion + split_amount - 1)
 		if (num <= has_emotion):
 			labels.append([1,0])
@@ -115,11 +115,8 @@ def _getTestBatch(has_emotion, no_emotion):
 
 
 
-
-
-
-
 def main():
+
 	##################################################################
 	### Load up the twitter GLOVE and split into words and vectors ###
 	##################################################################
@@ -136,7 +133,7 @@ def main():
 			word2idx[word] = index + 1 #PAD is zeroth index so shift by one
 			weights.append(word_weights)
 
-			if index + 1 == 10000:
+			if index + 1 == 35000:
 			# Limit size for now
 				break
 
@@ -151,8 +148,9 @@ def main():
 	weights.append(np.random.randn(EMBEDDING_DIMENSION))
 
 	### Construct final vocab
-	weights = np.asarray(weights)
-
+	weights = np.asarray(weights, dtype=np.float32)
+	print(f"weights shape = {weights.shape}")
+	print(f"here are some weights: {weights[:4]}")
 	VOCAB_SIZE = weights.shape[0]
 	print(f"vocab_size = {VOCAB_SIZE}")
 
@@ -206,6 +204,8 @@ def main():
 					break
 			tweetCounter += 1
 
+	print(f"ids shape: {ids.shape}")
+
 
 	###########################
 	### BUILD THE ACTUAL NN ###
@@ -215,18 +215,18 @@ def main():
 		
 	### Set up placeholders for input and labels
 	with tf.name_scope("Labels") as scope:
-		labels = tf.placeholder(tf.float32, [batchSize, numClasses])
+		labels = tf.placeholder(tf.float32, [BATCH_SIZE, NUM_CLASSES])
 	with tf.name_scope("Input") as scope:
-		input_data = tf.placeholder(tf.int32, [batchSize, max_tweet_length])
+		input_data = tf.placeholder(tf.int32, [BATCH_SIZE, MAX_TWEET_LENGTH])
 
 	### Get embedding vector
 	with tf.name_scope("Embeddings") as scope:
-		data = tf.Variable(tf.zeros([batchSize, max_tweet_length, max_dimensions]),dtype=tf.float32)
-		data = tf.nn.embedding_lookup(wordVectors, input_data)
+		data = tf.Variable(tf.zeros([BATCH_SIZE, MAX_TWEET_LENGTH, EMBEDDING_DIMENSION]),dtype=tf.float32)
+		data = tf.nn.embedding_lookup(weights, input_data)
 
 	### Set up LSTM cell then wrap cell in dropout layer to avoid overfitting
 	with tf.name_scope("LSTM_Cell") as scope:
-		lstmCell = tf.contrib.rnn.BasicLSTMCell(lstmUnits)
+		lstmCell = tf.contrib.rnn.BasicLSTMCell(LSTM_UNITS)
 		lstmCell = tf.contrib.rnn.DropoutWrapper(cell=lstmCell, output_keep_prob=0.75)
 
 	### Combine the 3D input with the LSTM cell and set up network
@@ -235,8 +235,8 @@ def main():
 		value, _ = tf.nn.dynamic_rnn(lstmCell, data, dtype=tf.float32)
 
 	with tf.name_scope("Fully_Connected") as scope:
-		weight = tf.Variable(tf.truncated_normal([lstmUnits, numClasses]), name='weights')
-		bias = tf.Variable(tf.constant(0.1, shape=[numClasses]), name='bias')
+		weight = tf.Variable(tf.truncated_normal([LSTM_UNITS, NUM_CLASSES]), name='weights')
+		bias = tf.Variable(tf.constant(0.1, shape=[NUM_CLASSES]), name='bias')
 		value = tf.transpose(value, [1, 0, 2], name='last_lstm')
 		last = tf.gather(value, int(value.get_shape()[0]) - 1)
 		tf.summary.histogram("weights", weight)
@@ -257,7 +257,7 @@ def main():
 		loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=labels))
 
 	with tf.name_scope("Training") as scope:
-		optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
+		optimizer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE).minimize(loss)
 	
 	sess = tf.InteractiveSession()
 	saver = tf.train.Saver() #(tf.global_variables())
@@ -294,18 +294,18 @@ def main():
 	
 
 
-	for i in range(iterations):
+	for i in range(ITERATIONS):
 		#Next Batch of reviews
-		nextTrainBatch, nextTrainBatchLabels = _getTrainBatch(num_has_emotion, num_no_emotion);
+		nextTrainBatch, nextTrainBatchLabels = _getTrainBatch(num_has_emo, num_no_emo, ids);
 		sess.run(optimizer, {input_data: nextTrainBatch, labels: nextTrainBatchLabels})
 
 		#Write training summary to board
-		if (i % 200 == 0):
+		if (i % 50 == 0):
 			summary = sess.run(summary_op, {input_data: nextTrainBatch, labels: nextTrainBatchLabels})
 			train_summary_writer.add_summary(summary, i)
 			train_summary_writer.flush()
 
-			nextTestBatch, nextTestBatchLabels = _getTestBatch(num_has_emotion, num_no_emotion);
+			nextTestBatch, nextTestBatchLabels = _getTestBatch(num_has_emo, num_no_emo, ids);
 			testSummary = sess.run(summary_op, {input_data: nextTestBatch, labels: nextTestBatchLabels})
 			test_summary_writer.add_summary(testSummary, i)
 			test_summary_writer.flush()
