@@ -20,10 +20,11 @@ FLAGS = re.MULTILINE | re.DOTALL
 EMBEDDING_DIMENSION = 200
 MAX_TWEET_LENGTH = 25
 BATCH_SIZE = 24
-LSTM_UNITS = 24
+LSTM_UNITS = 128
+LSTM_UNITS2 = 256
 NUM_CLASSES = 2
-ITERATIONS = 4000
-LEARNING_RATE = 1e-3
+ITERATIONS = 10000
+LEARNING_RATE = 1e-4
 FLAGS = re.MULTILINE | re.DOTALL
 """
 Clean tweets and create tags for often used
@@ -139,7 +140,7 @@ def main():
 				print(f"fucking up at index {index}")
 				print(f"index {index} is length {len(word_weights)}")
 
-			if index + 1 == 200000:
+			if index + 1 == 400000:
 			# Limit size for now
 				break
 
@@ -229,16 +230,18 @@ def main():
 
 	### Set up LSTM cell then wrap cell in dropout layer to avoid overfitting
 	with tf.name_scope("LSTM_Cell") as scope:
-		lstmCell = tf.contrib.rnn.BasicLSTMCell(LSTM_UNITS)
-		lstmCell = tf.contrib.rnn.DropoutWrapper(cell=lstmCell, output_keep_prob=0.75)
-
+		lstm_sizes = [LSTM_UNITS, LSTM_UNITS2]
+		lstms = [tf.contrib.rnn.BasicLSTMCell(size) for size in lstm_sizes]
+		drops = [tf.contrib.rnn.DropoutWrapper(lstm, output_keep_prob=0.75) for lstm in lstms]
+		cell = tf.contrib.rnn.MultiRNNCell(drops)
+		initial_state = cell.zero_state(BATCH_SIZE, tf.float32)
 	### Combine the 3D input with the LSTM cell and set up network
 	### 'value' is the last hidden state vector
 	with tf.name_scope("RNN_Forward") as scope:
-		value, _ = tf.nn.dynamic_rnn(lstmCell, embed, dtype=tf.float32)
+		value, _ = tf.nn.dynamic_rnn(cell, embed, initial_state=initial_state)
 
 	with tf.name_scope("Fully_Connected") as scope:
-		weight = tf.Variable(tf.truncated_normal([LSTM_UNITS, NUM_CLASSES]), name='weights')
+		weight = tf.Variable(tf.truncated_normal([LSTM_UNITS2, NUM_CLASSES]), name='weights')
 		bias = tf.Variable(tf.constant(0.1, shape=[NUM_CLASSES]), name='bias')
 		value = tf.transpose(value, [1, 0, 2], name='last_lstm')
 		last = tf.gather(value, int(value.get_shape()[0]) - 1)
@@ -315,7 +318,7 @@ def main():
 		
 		#Save network every so often
 		if (i % 1000 == 0 and i != 0):
-			save_path = saver.save(sess, f"all_emo_models/{emotion}_pretrained_lstm.ckpt", global_step=i)
+			save_path = saver.save(sess, f"models/{emotion}_pretrained_lstm.ckpt", global_step=i)
 			print(f"saved to {save_path}")
 		
 

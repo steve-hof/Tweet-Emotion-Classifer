@@ -18,17 +18,18 @@ import random
 
 FLAGS = re.MULTILINE | re.DOTALL
 EMBEDDING_DIMENSION = 200
-MAX_TWEET_LENGTH = 25
+MAX_TWEET_LENGTH = 35
 BATCH_SIZE = 24
-LSTM_UNITS = 24
+LSTM_UNITS = 64
 NUM_CLASSES = 2
-ITERATIONS = 4000
+ITERATIONS = 15000
 LEARNING_RATE = 1e-3
 FLAGS = re.MULTILINE | re.DOTALL
 """
 Clean tweets and create tags for often used
 emojis
 """
+hyp_str = "twtLen_" + str(MAX_TWEET_LENGTH) + "nLST_" + str(LSTM_UNITS) + "lr_" + str(LEARNING_RATE) + "_"
 
 def hashtag(text):
     text = text.group()
@@ -268,7 +269,8 @@ def main():
 	
 	### Output directory for models and summaries
 	timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-	logdir = os.path.abspath(os.path.join(os.path.curdir, "tensorboard", timestamp))
+	name = hyp_str + timestamp
+	logdir = os.path.abspath(os.path.join(os.path.curdir, "temp/tboard", name))
 	print(f"Writing to {logdir}")
 
 	### Summaries for loss and accuracy
@@ -315,7 +317,7 @@ def main():
 		
 		#Save network every so often
 		if (i % 1000 == 0 and i != 0):
-			save_path = saver.save(sess, f"all_emo_models/{emotion}_pretrained_lstm.ckpt", global_step=i)
+			save_path = saver.save(sess, f"temp/models/{emotion}_pretrained_lstm.ckpt", global_step=i)
 			print(f"saved to {save_path}")
 		
 
