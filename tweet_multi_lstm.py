@@ -7,20 +7,21 @@ import tensorflow as tf
 import datetime
 from random import randint
 
-EMBEDDING_DIMENSION = 200
+EMBEDDING_DIMENSION = 50
 MAX_TWEET_LENGTH = 35
 BATCH_SIZE = 24
-LSTM_UNITS = 12
+LSTM_UNITS = 128
 NUM_CLASSES = 2
-ITERATIONS = 1200
-LEARNING_RATE = 1e-2
-NUM_HIDDEN = 1
-DROPOUT_KEEP_PROB = .45
+ITERATIONS = 5000
+LEARNING_RATE = 1e-4
+NUM_HIDDEN = 2
+DROPOUT_KEEP_PROB = .55
 # NUM_STEPS = 35
 
 hyp_str = "nLST-" + str(LSTM_UNITS) + "lr-" + str(LEARNING_RATE) + \
           "n_hid-" + str(NUM_HIDDEN) + \
-          "d_Prob-" + str(DROPOUT_KEEP_PROB) + "_"
+          "d_Prob-" + str(DROPOUT_KEEP_PROB) + \
+          "bSize-" + str(BATCH_SIZE) + "_"
 
 
 def _get_train_batch(train_emo_ids, train_no_emo_ids):
@@ -55,7 +56,7 @@ def _get_test_batch(test_emo_ids, test_no_emo_ids):
 
 def main():
     # load up the saved ids and weights
-    with open('pre_processed_pickles/anger/tweet_data_1M.pickle', 'rb') as f:
+    with open('pre_processed_pickles/anger/combined_tweet_data_50d.pickle', 'rb') as f:
         train_emo, train_no_emo, test_emo, test_no_emo, weights = pickle.load(f)
 
     # BUILD THE ACTUAL NN
@@ -114,11 +115,11 @@ def main():
     # Output directory for models and summaries
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     name = hyp_str + timestamp
-    logdir = os.path.abspath(os.path.join(os.path.curdir, "temp/tboard", name))
+    logdir = os.path.abspath(os.path.join(os.path.curdir, "temp_50d/tboard", name))
     print(f"Writing to {logdir}")
 
     # Summaries for loss and accuracy
-    # acc_summary = tf.summary.scalar('Accuracy', accuracy)
+    acc_summary = tf.summary.scalar('Accuracy', accuracy)
 
     # Training summaries
     train_summary_dir = os.path.join(logdir, "summaries", "train")
@@ -155,8 +156,8 @@ def main():
             test_summary_writer.flush()
 
         # Save network every so often
-        if i % 100 == 0 and i != 0:
-            save_path = saver.save(sess, f"temp/models/_pretrained_lstm.ckpt", global_step=i)
+        if i % 1000 == 0 and i != 0:
+            save_path = saver.save(sess, f"temp_50d/models/_pretrained_lstm.ckpt", global_step=i)
             print(f"saved to {save_path}")
 
     train_summary_writer.close()

@@ -5,7 +5,7 @@ import pandas as pd
 import pickle
 import re
 
-EMBEDDING_DIMENSION = 50
+embedding_dimension = 25
 MAX_TWEET_LENGTH = 35
 PAD_TOKEN = 0
 FLAGS = re.MULTILINE | re.DOTALL
@@ -90,7 +90,7 @@ def create_train_and_test(has_emo, no_emo, test_size=0.2):
 
 def main():
     # Load up the GLOVE and split into words and vectors #
-    glove_filepath = "/Users/stevehof/school/comp/Word_Embedding_Files/glove.twitter.27B/glove.twitter.27B.50d.txt"
+    glove_filepath = "/Users/stevehof/school/comp/Word_Embedding_Files/glove.twitter.27B/glove.twitter.27B.25d.txt"
     word2idx = {'PAD': PAD_TOKEN}
     weights = []
 
@@ -100,11 +100,11 @@ def main():
             values = line.split()  # word and weights separated by space
             word = values[0]  # word is first symbol on each line
             word_weights = np.asarray(values[1:], dtype=np.float32)  # remainder of line is weights for words
-            if len(word_weights) != 50:
+            if len(word_weights) != embedding_dimension:
                 continue
             word2idx[word] = index + 1  # PAD is zeroth index so shift by one
             weights.append(word_weights)
-            if len(word_weights) != 50:
+            if len(word_weights) != embedding_dimension:
                 print(f"fucking up at index {index}")
                 print(f"index {index} is length {len(word_weights)}")
 
@@ -126,10 +126,19 @@ def main():
     # VOCAB_SIZE = weights.shape[0]
 
     # Import and clean data
-    df = pd.read_csv('training_data/2018-E-c-En-train.txt',
+    df_train = pd.read_csv('training_data/2018-E-c-En-train.txt',
                      sep='\t',
                      quoting=3,
                      lineterminator='\r')
+
+    df_test = pd.read_csv('training_data/2018-E-c-En-test.txt',
+                         sep='\t',
+                         quoting=3,
+                         lineterminator='\r')
+
+    frames = [df_train, df_test]
+    df = pd.concat(frames)
+
     emotions = df.columns[2:]
     emotion = 'anger'
     df = df[['Tweet', emotion]]
@@ -138,7 +147,7 @@ def main():
 
     has_emo_tweets, no_emo_tweets = clean_and_separate(df, emotion)
     num_has_emo, num_no_emo = len(has_emo_tweets), len(no_emo_tweets)
-    total_num_tweets = num_has_emo + num_no_emo
+    # total_num_tweets = num_has_emo + num_no_emo
 
     ##########################
     # Now we need to turn our tweets into vectors representing their indices #
@@ -176,7 +185,7 @@ def main():
         tweet_counter += 1
 
     train_has_emo, train_no_emo, test_has_emo, test_no_emo = create_train_and_test(has_emo_ids, no_emo_ids)
-    pickle_path = "pre_processed_pickles/" + str(emotion) + "/tweet_data_50d.pickle"
+    pickle_path = "pre_processed_pickles/" + str(emotion) + "/combined_tweet_data_25d.pickle"
     with open(pickle_path, 'wb') as f:
         pickle.dump([train_has_emo, train_no_emo, test_has_emo, test_no_emo, weights], f)
 
