@@ -10,10 +10,10 @@ from random import randint
 EMBEDDING_DIMENSION = 50
 MAX_TWEET_LENGTH = 35
 BATCH_SIZE = 24
-LSTM_UNITS = 64
+LSTM_UNITS = 256
 NUM_CLASSES = 2
 ITERATIONS = 8000
-LEARNING_RATE = 1e-2
+LEARNING_RATE = 1e-3
 NUM_HIDDEN = 2
 DROPOUT_KEEP_PROB = .55
 # NUM_STEPS = 35
@@ -122,6 +122,7 @@ def main():
 
     # Summaries for loss and accuracy
     acc_summary = tf.summary.scalar('Accuracy', accuracy)
+    loss_summary = tf.summary.scalar('Loss', loss)
 
     # Training summaries
     train_summary_dir = os.path.join(logdir, "summaries", "train")
