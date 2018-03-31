@@ -10,7 +10,7 @@ from random import randint
 EMBEDDING_DIMENSION = 50
 MAX_TWEET_LENGTH = 35
 BATCH_SIZE = 24
-LSTM_UNITS = 256
+LSTM_UNITS = 32
 NUM_CLASSES = 2
 ITERATIONS = 8000
 LEARNING_RATE = 1e-3
@@ -72,22 +72,25 @@ def main():
         input_data = tf.placeholder(tf.int32, [BATCH_SIZE, MAX_TWEET_LENGTH])
 
     # Get embedding vector
-    with tf.name_scope("Embeds_Layer") as scope:
+    with tf.name_scope('Embeds_Layer') as scope:
         embedding = tf.Variable(tf.zeros([len(weights), EMBEDDING_DIMENSION]), dtype=tf.float32,
                                 name='embedding')
         embed = tf.nn.embedding_lookup(embedding, input_data)  # maybe change 'embedding back to 'weights'
 
+        # embed = tf.unstack(embed, num=BATCH_SIZE, axis=1, name='unpck')
+
     # Set up LSTM cell then wrap cell in dropout layer to avoid over fitting
     with tf.name_scope("LSTM_Cell") as scope:
+        lstm_fw_cell = tf.contrib.rnn.BasicLSTMCell(LSTM_UNITS)
+        lstm_bw_cell = tf.contrib.rnn.BasicLSTMCell(LSTM_UNITS)
         lstm_cell = tf.contrib.rnn.BasicLSTMCell(LSTM_UNITS)
         lstm_cell = tf.contrib.rnn.DropoutWrapper(cell=lstm_cell, output_keep_prob=DROPOUT_KEEP_PROB)
         stacked_lstm = tf.contrib.rnn.MultiRNNCell([lstm_cell for _ in range(NUM_HIDDEN)], state_is_tuple=True)
-        initial_state = stacked_lstm.zero_state(BATCH_SIZE, dtype=tf.float32)
+        # initial_state = stacked_lstm.zero_state(BATCH_SIZE, dtype=tf.float32)
 
     with tf.name_scope("RNN_Forward") as scope:
-        value, state = tf.nn.dynamic_rnn(stacked_lstm, embed,
-                                         initial_state=initial_state,
-                                         dtype=tf.float32, time_major=False)
+        value, state = tf.nn.bidirectional_dynamic_rnn(cell_fw=stacked_lstm, cell_bw=stacked_lstm, inputs=embed,
+                                                       dtype=tf.float32, time_major=False)
 
     with tf.name_scope("Fully_Connected") as scope:
         weight = tf.Variable(tf.truncated_normal([LSTM_UNITS, NUM_CLASSES]), name='weights')
