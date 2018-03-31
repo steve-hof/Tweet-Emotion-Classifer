@@ -76,22 +76,21 @@ def main():
         embedding = tf.Variable(tf.zeros([len(weights), EMBEDDING_DIMENSION]), dtype=tf.float32,
                                 name='embedding')
         embed = tf.nn.embedding_lookup(embedding, input_data)  # maybe change 'embedding back to 'weights'
-
-        # embed = tf.unstack(embed, num=BATCH_SIZE, axis=1, name='unpck')
+        embed = tf.transpose(embed, [1, 0, 2], name='last_lstm')
+        embed = tf.gather(embed, int(embed.get_shape()[0]) - 1)
+        # embed = tf.unstack(embed, axis=1, name='unpck')
 
     # Set up LSTM cell then wrap cell in dropout layer to avoid over fitting
     with tf.name_scope("LSTM_Cell") as scope:
-        lstm_fw_cell = tf.contrib.rnn.BasicLSTMCell(LSTM_UNITS)
-        lstm_bw_cell = tf.contrib.rnn.BasicLSTMCell(LSTM_UNITS)
-        lstm_cell = tf.contrib.rnn.BasicLSTMCell(LSTM_UNITS)
-        lstm_cell = tf.contrib.rnn.DropoutWrapper(cell=lstm_cell, output_keep_prob=DROPOUT_KEEP_PROB)
-        stacked_lstm = tf.contrib.rnn.MultiRNNCell([lstm_cell for _ in range(NUM_HIDDEN)], state_is_tuple=True)
+        lstm_fw_cell = tf.contrib.rnn.BasicRNNCell(LSTM_UNITS)
+        lstm_bw_cell = tf.contrib.rnn.BasicRNNCell(LSTM_UNITS)
+        rnn_cell = tf.contrib.rnn.BasicRNNCell(LSTM_UNITS)
+        rnn_cell = tf.contrib.rnn.DropoutWrapper(cell=rnn_cell, output_keep_prob=DROPOUT_KEEP_PROB)
+        stacked_lstm = tf.contrib.rnn.MultiRNNCell([rnn_cell for _ in range(NUM_HIDDEN)], state_is_tuple=True)
         initial_state = stacked_lstm.zero_state(BATCH_SIZE, dtype=tf.float32)
 
     with tf.name_scope("RNN_Forward") as scope:
-        value, state = tf.nn.dynamic_rnn(stacked_lstm, embed,
-                                         initial_state=initial_state,
-                                         dtype=tf.float32, time_major=False)
+        value, state = tf.nn.bidirectional_dynamic_rnn(rnn_cell, rnn_cell, embed)
 
     with tf.name_scope("Fully_Connected") as scope:
         weight = tf.Variable(tf.truncated_normal([LSTM_UNITS, NUM_CLASSES]), name='weights')
