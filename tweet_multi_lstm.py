@@ -10,7 +10,7 @@ from random import randint
 EMBEDDING_DIMENSION = 50
 MAX_TWEET_LENGTH = 35
 BATCH_SIZE = 24
-LSTM_UNITS = 256
+LSTM_UNITS = 64
 NUM_CLASSES = 2
 ITERATIONS = 8000
 LEARNING_RATE = 1e-2
@@ -21,7 +21,7 @@ DROPOUT_KEEP_PROB = .55
 hyp_str = "nLST-" + str(LSTM_UNITS) + "lr-" + str(LEARNING_RATE) + \
           "n_hid-" + str(NUM_HIDDEN) + \
           "d_Prob-" + str(DROPOUT_KEEP_PROB) + \
-          "bSize-" + str(BATCH_SIZE) + "_"
+          "bSize-" + str(BATCH_SIZE) + "_bal-T_"
 
 
 def _get_train_batch(train_emo_ids, train_no_emo_ids):
@@ -56,7 +56,9 @@ def _get_test_batch(test_emo_ids, test_no_emo_ids):
 
 def main():
     # load up the saved ids and weights
-    with open('pre_processed_pickles/anger/balanced_tweet_data_50d.pickle', 'rb') as f:
+    pickle_path = 'pre_processed_pickles/anger/balanced_tweet_data_' + \
+                  str(EMBEDDING_DIMENSION) + 'd.pickle'
+    with open(pickle_path, 'rb') as f:
         train_emo, train_no_emo, test_emo, test_no_emo, weights = pickle.load(f)
 
     # BUILD THE ACTUAL NN
