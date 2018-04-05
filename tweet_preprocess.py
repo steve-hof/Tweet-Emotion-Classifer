@@ -9,7 +9,7 @@ INTENDED_EMBEDDING_DIMENSION = 50
 MAX_TWEET_LENGTH = 35
 PAD_TOKEN = 0
 FLAGS = re.MULTILINE | re.DOTALL
-GLOVE_LIMIT = 200000
+GLOVE_LIMIT = 20000
 
 
 def fix_split(pattern, string):
@@ -191,7 +191,7 @@ def main():
         tweet_counter += 1
 
     train_has_emo, train_no_emo, test_has_emo, test_no_emo = create_train_and_test(has_emo_ids, no_emo_ids)
-    pickle_path = "pre_processed_pickles/" + str(emotion) + "/balanced_tweet_data_" + str(
+    pickle_path = "pre_processed_pickles/" + str(emotion) + "/vocab_size-" + str(GLOVE_LIMIT) + "balanced_tweet_data_" + str(
         INTENDED_EMBEDDING_DIMENSION) + "d.pickle"
     with open(pickle_path, 'wb') as f:
         pickle.dump([train_has_emo, train_no_emo, test_has_emo, test_no_emo, weights], f)
