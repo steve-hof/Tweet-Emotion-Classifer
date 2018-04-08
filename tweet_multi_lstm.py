@@ -16,7 +16,6 @@ ITERATIONS = 8000
 LEARNING_RATE = 1e-3
 NUM_HIDDEN = 4
 DROPOUT_KEEP_PROB = .75
-# NUM_STEPS = 35
 GLOVE_LIMIT = 20000
 
 # Next tweak: either raise dropout or lower learning rate
@@ -120,7 +119,7 @@ def main():
     # Output directory for models and summaries
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     name = hyp_str + timestamp
-    logdir = os.path.abspath(os.path.join(os.path.curdir, "temp_50d/tboard", name))
+    logdir = os.path.abspath(os.path.join(os.path.curdir, "temp_glove_lim-20k/50d/tboard", name))
     print(f"Writing to {logdir}")
 
     # Summaries for loss and accuracy
@@ -162,7 +161,7 @@ def main():
 
         # Save network every so often
         if i % 1000 == 0 and i != 0:
-            save_path = saver.save(sess, f"temp_50d/models/_pretrained_lstm.ckpt", global_step=i)
+            save_path = saver.save(sess, f"temp_glove_lim-20k/50d/models/_pretrained_lstm.ckpt", global_step=i)
             print(f"saved to {save_path}")
 
     train_summary_writer.close()

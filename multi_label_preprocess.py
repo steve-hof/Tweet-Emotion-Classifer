@@ -141,15 +141,20 @@ def main():
     # VOCAB_SIZE = weights.shape[0]
 
     # Import and clean data
-    df = pd.read_csv('training_data/2018-E-c-En-train.txt',
-                     sep='\t',
-                     quoting=3,
-                     lineterminator='\r')
-    six_emo_df = pd.read_csv('training_data/text_emotion.csv')
-    emotion_new_list = six_emo_df.sentiment.unique()
-    counts = six_emo_df['sentiment'].value_counts()
-    dummy_df = pd.get_dummies(six_emo_df['sentiment'])
-    df = pd.concat([six_emo_df, dummy_df], axis=1)
+    # df = pd.read_csv('training_data/2018-E-c-En-train.txt',
+    #                  sep='\t',
+    #                  quoting=3,
+    #                  lineterminator='\r')
+    df = pd.read_csv('training_data/text_emotion.csv')
+    df = df[['sentiment', 'content']]
+    emotion_new_list = df.sentiment.unique()
+    counts = df['sentiment'].value_counts()
+    keep_cols = ['neutral', 'worry', 'happiness', 'sadness', 'love']
+    drop_cols = ['anger', 'boredom', 'enthusiasm', 'empty', 'hate', 'relief', 'fun', 'surprise']
+    df = df[df['sentiment'].isin(keep_cols)]
+    dummy_df = pd.get_dummies(df['sentiment'])
+    df = pd.concat([df, dummy_df], axis=1)
+    df.drop(df.columns[0], axis=1, inplace=True)
     fill = 12
 
     # emotions = df.columns[2:]
