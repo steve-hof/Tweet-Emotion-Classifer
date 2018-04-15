@@ -13,6 +13,38 @@ from keras.metrics import categorical_accuracy, categorical_crossentropy
 
 plt.style.use('fivethirtyeight')
 
+
+# Plot a confusion matrix.
+# cm is the confusion matrix, names are the names of the classes.
+def plot_confusion_matrix(cm, names, title='Confusion matrix', cmap=plt.cm.Blues):
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(names))
+    plt.xticks(tick_marks, names, rotation=45)
+    plt.yticks(tick_marks, names)
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+
+
+# Plot an ROC. pred - the predictions, y - the expected output.
+def plot_roc(pred, y):
+    fpr, tpr, _ = roc_curve(y, pred)
+    roc_auc = auc(fpr, tpr)
+
+    plt.figure()
+    plt.plot(fpr, tpr, label='ROC curve (area = %0.2f)' % roc_auc)
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver Operating Characteristic (ROC)')
+    plt.legend(loc="lower right")
+    plt.show()
+
+
 # df = pd.read_csv('training_data/text_emotion.csv')
 # df = df[['sentiment', 'content']]
 # emotion_new_list = df.sentiment.unique()
@@ -94,15 +126,6 @@ model.compile(loss='binary_crossentropy',
               metrics=['categorical_accuracy'])
 
 history = model.fit(x_train, y_train, batch_size=batch_size, epochs=5, validation_split=0.2)
-
-
-# model = Sequential()
-# model.add(Embedding(max_features, embedding_dims, input_length=maxlen, embeddings_initializer='uniform', name='Embedding'))
-# model.add(LSTM(embedding_dims, dropout=0.2, recurrent_dropout=0.2, name='LSTM'))
-# # model.add(LSTM(50, dropout=0.2, recurrent_dropout=0.2), name='LSTM_2')
-# model.add(Dense(11, activation='sigmoid', name='Output'))
-# model.compile(loss='binary_crossentropy', optimizer=Adam(0.01), metrics=['categorical_accuracy'])
-# history = model.fit(x_train, y_train, batch_size=batch_size, epochs=10, validation_split=0.2)
 
 # Plotting
 print(history.history.keys())
