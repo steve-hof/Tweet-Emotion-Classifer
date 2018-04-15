@@ -74,35 +74,35 @@ x_test = sequence.pad_sequences(x_test, maxlen=maxlen)
 print('x_train shape:', x_train.shape)
 print('x_test shape:', x_test.shape)
 
-# tweet_input = Input((maxlen,))
+tweet_input = Input((maxlen,))
 
 # we start off with an efficient embedding layer which maps
 # our vocab indices into embedding_dims dimensions
-# tweet_emb = Embedding(max_features, embedding_dims, input_length=maxlen,
-#                       embeddings_initializer="uniform")(tweet_input)
+tweet_emb = Embedding(max_features, embedding_dims, input_length=maxlen,
+                      embeddings_initializer="uniform")(tweet_input)
 
 # we add a GlobalMaxPooling1D, which will extract features from the embeddings
 # of all words in the tweet
-# h = GlobalMaxPooling1D()(tweet_emb)
+h = GlobalMaxPooling1D()(tweet_emb)
 
 # We project onto a 11-unit output layer, and squash it with a sigmoid:
-# output = Dense(11, activation='sigmoid')(h)
-# model = Model(inputs=tweet_input, outputs=output)
-#
-# model.compile(loss='binary_crossentropy',
-#               optimizer=Adam(0.01),
-#               metrics=['categorical_accuracy'])
-#
-# history = model.fit(x_train, y_train, batch_size=batch_size, epochs=5, validation_split=0.2)
+output = Dense(11, activation='sigmoid')(h)
+model = Model(inputs=tweet_input, outputs=output)
+
+model.compile(loss='binary_crossentropy',
+              optimizer=Adam(0.01),
+              metrics=['categorical_accuracy'])
+
+history = model.fit(x_train, y_train, batch_size=batch_size, epochs=5, validation_split=0.2)
 
 
-model = Sequential()
-model.add(Embedding(max_features, embedding_dims, input_length=maxlen, embeddings_initializer='uniform', name='Embedding'))
-model.add(LSTM(embedding_dims, dropout=0.2, recurrent_dropout=0.2, name='LSTM'))
-# model.add(LSTM(50, dropout=0.2, recurrent_dropout=0.2), name='LSTM_2')
-model.add(Dense(11, activation='sigmoid', name='Output'))
-model.compile(loss='binary_crossentropy', optimizer=Adam(0.01), metrics=['categorical_accuracy'])
-history = model.fit(x_train, y_train, batch_size=batch_size, epochs=10, validation_split=0.2)
+# model = Sequential()
+# model.add(Embedding(max_features, embedding_dims, input_length=maxlen, embeddings_initializer='uniform', name='Embedding'))
+# model.add(LSTM(embedding_dims, dropout=0.2, recurrent_dropout=0.2, name='LSTM'))
+# # model.add(LSTM(50, dropout=0.2, recurrent_dropout=0.2), name='LSTM_2')
+# model.add(Dense(11, activation='sigmoid', name='Output'))
+# model.compile(loss='binary_crossentropy', optimizer=Adam(0.01), metrics=['categorical_accuracy'])
+# history = model.fit(x_train, y_train, batch_size=batch_size, epochs=10, validation_split=0.2)
 
 # Plotting
 print(history.history.keys())
@@ -114,6 +114,7 @@ plt.ylabel('accuracy')
 plt.xlabel('epoch')
 plt.legend(['train', 'test'], loc='best')
 plt.show()
+
 # summarize history for loss
 plt.plot(history.history['loss'])
 plt.plot(history.history['val_loss'])

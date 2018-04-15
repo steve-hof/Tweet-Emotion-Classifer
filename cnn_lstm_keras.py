@@ -3,6 +3,7 @@ import string
 import numpy as np
 import pandas as pd
 from keras.preprocessing.text import Tokenizer
+from keras import optimizers
 from keras.preprocessing.sequence import pad_sequences
 from keras.models import Sequential
 from keras.layers import Dense, Flatten, LSTM, Conv1D, MaxPooling1D, Dropout, Activation
@@ -10,21 +11,11 @@ from keras.layers.embeddings import Embedding
 from keras.metrics import categorical_accuracy, categorical_crossentropy
 
 import matplotlib.pyplot as plt
-import plotly.offline as py
-import plotly.graph_objs as go
-
-py.init_notebook_mode(connected=True)
 plt.style.use('fivethirtyeight')
 
-# NLTK
-import nltk
-from nltk.corpus import stopwords
-from nltk.stem import SnowballStemmer
-from sklearn.manifold import TSNE
-
 INTENDED_EMBEDDING_DIMENSION = 50
-max_features = 20000  # number of words we want to keep
-maxlen = 35  # max length of the tweets in the model
+max_vocab = 20000  # number of words we want to keep
+max_tweet_length = 35  # max length of the tweets in the model
 batch_size = 64  # batch size for the model
 embedding_dims = 50  # dimension of the hidden variable, i.e. the embedding dimension
 FLAGS = re.MULTILINE | re.DOTALL
@@ -77,7 +68,24 @@ def tokenize(text):
     return text.lower()
 
 
-if __name__ == '__main__':
+# Scatter plot for word embeddings
+
+def plot_words(data, start, stop, step, word_list):
+    trace = go.Scatter(
+        x=data[start:stop:step, 0],
+        y=data[start:stop:step, 1],
+        mode='markers',
+        text=word_list[start:stop:step]
+    )
+    layout = dict(title='t-SNE 1 vs t-SNE 2',
+                  yaxis=dict(title='t-SNE 2'),
+                  xaxis=dict(title='t-SNE 1'),
+                  hovermode='closest')
+    fig = dict(data=[trace], layout=layout)
+    py.iplot(fig)
+
+
+def main():
     train_df = pd.read_csv('training_data/2018-E-c-En-train.txt',
                            sep='\t',
                            quoting=3,
@@ -108,8 +116,9 @@ if __name__ == '__main__':
     X_train = train_df['Tweet'].values
     y_train = train_df[emotions].values
     X_test = test_df['Tweet'].values
+    y_test = test_df[emotions].values
 
-    tokenizer = Tokenizer(num_words=max_features)
+    tokenizer = Tokenizer(num_words=max_vocab)
     tokenizer.fit_on_texts(list(X_train) + list(X_test))
     x_train = tokenizer.texts_to_sequences(X_train)
     x_test = tokenizer.texts_to_sequences(X_test)
@@ -118,8 +127,8 @@ if __name__ == '__main__':
     print('Average train sequence length: {}'.format(np.mean(list(map(len, x_train)), dtype=int)))
     print('Average test sequence length: {}'.format(np.mean(list(map(len, x_test)), dtype=int)))
 
-    x_train = pad_sequences(x_train, maxlen=maxlen)
-    x_test = pad_sequences(x_test, maxlen=maxlen)
+    x_train = pad_sequences(x_train, maxlen=max_tweet_length)
+    x_test = pad_sequences(x_test, maxlen=max_tweet_length)
     print('x_train shape:', x_train.shape)
     print('x_test shape:', x_test.shape)
 
@@ -134,30 +143,36 @@ if __name__ == '__main__':
     print('Loaded %s word vectors.' % len(embeddings_index))
 
     # create a weight matrix for words in training docs
-    embedding_matrix = np.zeros((max_features, embedding_dims))
+    embedding_matrix = np.zeros((max_vocab, embedding_dims))
     for word, index in tokenizer.word_index.items():
-        if index > max_features - 1:
+        if index > max_vocab - 1:
             break
         else:
             embedding_vector = embeddings_index.get(word)
             if embedding_vector is not None:
                 embedding_matrix[index] = embedding_vector
 
+    # Create Neural Network
     model_glove = Sequential()
-    model_glove.add(
-        Embedding(max_features, embedding_dims, input_length=maxlen, weights=[embedding_matrix], trainable=False))
+    model_glove.add(Embedding(max_vocab, embedding_dims, input_length=max_tweet_length,
+                              weights=[embedding_matrix], trainable=False))
     model_glove.add(Dropout(0.2))
-    model_glove.add(Conv1D(64, 5, activation='relu'))
-    model_glove.add(MaxPooling1D(pool_size=4))
-    model_glove.add(LSTM(embedding_dims))
+    model_glove.add(LSTM(embedding_dims, activation='relu', return_sequences=True))
+    model_glove.add(Dropout(0.2))
+    model_glove.add(Conv1D(35, 11, activation='relu'))
+    model_glove.add(MaxPooling1D(pool_size=11))
+    model_glove.add(LSTM(embedding_dims, activation='relu'))
     model_glove.add(Dense(11, activation='sigmoid'))
-    model_glove.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy'])
+    adam = optimizers.Adam(lr=0.01, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.005, amsgrad=True)
+
+    model_glove.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['categorical_accuracy'])
 
     history = model_glove.fit(x_train, y_train, batch_size=batch_size, validation_split=0.2, epochs=12)
 
     # Plotting
     print(history.history.keys())
-    # summarize history for accuracy
+
+    # Summarize history for accuracy
     plt.plot(history.history['categorical_accuracy'])
     plt.plot(history.history['val_categorical_accuracy'])
     plt.title('model accuracy')
@@ -165,7 +180,8 @@ if __name__ == '__main__':
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='best')
     plt.show()
-    # summarize history for loss
+
+    # Summarize history for loss
     plt.plot(history.history['loss'])
     plt.plot(history.history['val_loss'])
     plt.title('model loss')
@@ -173,4 +189,9 @@ if __name__ == '__main__':
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='best')
     plt.show()
-fill = 12
+
+    fill = 12
+
+
+if __name__ == '__main__':
+    main()
