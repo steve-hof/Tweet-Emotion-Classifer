@@ -10,8 +10,19 @@ from keras.layers import Dense, Embedding, GlobalMaxPooling1D, Dropout, LSTM
 from keras.preprocessing.text import Tokenizer
 from keras.optimizers import Adam
 from keras.metrics import categorical_accuracy, categorical_crossentropy
+import io
+import requests
+import os
+from sklearn.model_selection import train_test_split
+from sklearn import metrics
+from keras.layers.core import Dense, Activation
+from keras.callbacks import EarlyStopping
+from keras.callbacks import ModelCheckpoint
+from sklearn import svm, datasets
+from sklearn.metrics import confusion_matrix
 
-plt.style.use('fivethirtyeight')
+
+# plt.style.use('fivethirtyeight')
 
 
 # Plot a confusion matrix.
@@ -86,8 +97,9 @@ test_df.reset_index(drop=True, inplace=True)
 X_train = train_df['Tweet'].values
 y_train = train_df[emotions].values
 X_test = test_df['Tweet'].values
+y_test = test_df[emotions].values
 
-max_features = 20000  # number of words we want to keep
+max_features = 80000  # number of words we want to keep
 maxlen = 35  # max length of the tweets in the model
 batch_size = 64  # batch size for the model
 embedding_dims = 20  # dimension of the hidden variable, i.e. the embedding dimension
@@ -107,25 +119,59 @@ print('x_train shape:', x_train.shape)
 print('x_test shape:', x_test.shape)
 
 tweet_input = Input((maxlen,))
-
+fill = 2
 # we start off with an efficient embedding layer which maps
 # our vocab indices into embedding_dims dimensions
-tweet_emb = Embedding(max_features, embedding_dims, input_length=maxlen,
-                      embeddings_initializer="uniform")(tweet_input)
+# tweet_emb = Embedding(max_features, embedding_dims, input_length=maxlen,
+#                       embeddings_initializer="uniform")(tweet_input)
 
-# we add a GlobalMaxPooling1D, which will extract features from the embeddings
-# of all words in the tweet
-h = GlobalMaxPooling1D()(tweet_emb)
+# # we add a GlobalMaxPooling1D, which will extract features from the embeddings
+# # of all words in the tweet
+# h = GlobalMaxPooling1D()(tweet_emb)
+#
+# # We project onto a 11-unit output layer, and squash it with a sigmoid:
+# output = Dense(11, activation='sigmoid')(h)
+# model = Model(inputs=tweet_input, outputs=output)
+#
+# model.compile(loss='binary_crossentropy',
+#               optimizer=Adam(0.01),
+#               metrics=['categorical_accuracy'])
+#
+# history = model.fit(x_train, y_train, batch_size=batch_size, epochs=5, validation_split=0.2)
 
-# We project onto a 11-unit output layer, and squash it with a sigmoid:
-output = Dense(11, activation='sigmoid')(h)
-model = Model(inputs=tweet_input, outputs=output)
-
+model = Sequential()
+model.add(Embedding(max_features, embedding_dims, input_length=maxlen,
+                    embeddings_initializer="uniform"))
+model.add(GlobalMaxPooling1D())
+model.add(Dense(128, activation='relu'))
+model.add(Dropout(.5))
+model.add(Dense(28, activation='relu'))
+model.add(Dense(y_train.shape[1], activation='sigmoid'))
 model.compile(loss='binary_crossentropy',
               optimizer=Adam(0.01),
               metrics=['categorical_accuracy'])
 
-history = model.fit(x_train, y_train, batch_size=batch_size, epochs=5, validation_split=0.2)
+# Incorporate below to implement early stopping
+monitor = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=10, verbose=1, mode='auto')
+checkpointer = ModelCheckpoint(filepath="multi_label_best_weights.hdf5", verbose=0, save_best_only=True)  # save best model
+history = model.fit(x_train, y_train, batch_size=batch_size, validation_data=(x_test, y_test), callbacks=[monitor, checkpointer], verbose=2, epochs=30)
+model.load_weights('multi_label_best_weights.hdf5')  # load weights from best model
+
+# history = model.fit(x_train, y_train, batch_size=batch_size, epochs=30, validation_split=0.2)
+
+pred = model.predict(x_test)
+pred = np.argmax(pred, axis=1)
+print(f"Predictions: {pred}")
+y_test2 = np.argmax(y_test, axis=1)
+
+# Compute confusion matrix
+cm = confusion_matrix(y_test2, pred)
+np.set_printoptions(precision=2)
+print('Confusion matrix, without normalization')
+print(cm)
+plt.figure()
+plot_confusion_matrix(cm, emotions)
+plt.show()
 
 # Plotting
 print(history.history.keys())
