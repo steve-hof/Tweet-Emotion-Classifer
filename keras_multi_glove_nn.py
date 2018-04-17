@@ -8,16 +8,17 @@ from keras.preprocessing import sequence
 from keras.preprocessing.sequence import pad_sequences
 from keras.utils import to_categorical
 from keras.models import Model, Input, Sequential
-from keras.layers import Input, Dense, Embedding, GlobalMaxPooling1D, Dropout, LSTM, Activation
+from keras.layers import Input, Dense, Embedding, GlobalMaxPooling1D, Dropout, LSTM, Activation, Conv1D, MaxPooling1D
 from keras.preprocessing.text import Tokenizer
 from keras.optimizers import Adam
 from keras.callbacks import EarlyStopping, ModelCheckpoint
+import keras.backend as K
 from keras.metrics import categorical_accuracy, categorical_crossentropy
 
-from sklearn.model_selection import train_test_split
-from sklearn import metrics
-from sklearn import svm, datasets
-from sklearn.metrics import confusion_matrix, accuracy_score
+from sklearn.dummy import DummyClassifier
+from sklearn.metrics import hamming_loss
+from sklearn.metrics import confusion_matrix, accuracy_score, jaccard_similarity_score, precision_score, recall_score, \
+    f1_score
 
 BASE_PATH = ''
 EMBEDDINGS_PATH = os.path.abspath("/Users/stevehof/school/comp/Word_Embedding_Files")
@@ -27,10 +28,36 @@ MAX_TWEET_LENGTH = 25
 MAX_VOCAB = 20000
 VALIDATION_RATIO = 0.2
 BATCH_SIZE = 64
+LEARNING_RATE = 0.01
 
 
 def avg_tweet_length(frame, column):
     return len(frame[column].str.cat(sep=' ').split()) / len(frame[column])
+
+
+def build_lstm_nn(embed_layer, y_train):
+    tweet_input = Input(shape=(MAX_TWEET_LENGTH,), dtype='int32')
+    embedded_tweets = embed_layer(tweet_input)
+    m = LSTM(64, activation='relu')(embedded_tweets)
+    output = Dense(y_train.shape[1], activation='sigmoid')(m)
+    lstm_model = Model(tweet_input, output)
+    lstm_model.compile(loss='binary_crossentropy',
+                       optimizer=Adam(LEARNING_RATE),
+                       metrics=['categorical_accuracy'])
+    return lstm_model
+
+
+def build_basic_nn(embed_layer, y_train):
+    tweet_input = Input(shape=(MAX_TWEET_LENGTH,), dtype='int32')
+    embedded_tweets = embed_layer(tweet_input)
+    m = GlobalMaxPooling1D()(embedded_tweets)
+    m = Dense(12, activation='sigmoid')(m)
+    # m = Dense(28, activation='relu')(m)
+    output = Dense(y_train.shape[1])(m)
+    basic_model = Model(tweet_input, output)
+    basic_model.compile(loss='binary_crossentropy', metrics=['categorical_accuracy'],
+                        optimizer=Adam(LEARNING_RATE))
+    return basic_model
 
 
 embedding_index = {}
@@ -53,7 +80,7 @@ val_df = pd.read_csv('training_data/2018-E-c-En-dev.txt',
                      quoting=3,
                      lineterminator='\r')
 
-# Combine datasets
+# Combine data frames
 df = train_df.append(val_df, ignore_index=True)
 
 # Clean up training data
@@ -108,36 +135,18 @@ embedding_layer = Embedding(num_words,
                             trainable=False)
 
 print('Training model...')
-model = Sequential()
-model.add(Embedding(MAX_VOCAB, EMBEDDING_DIMENSION, input_length=MAX_TWEET_LENGTH,
-                    embeddings_initializer="uniform"))
-model.add(GlobalMaxPooling1D())
-model.add(Dense(128, activation='relu'))
-model.add(Dropout(.5))
-model.add(Dense(28, activation='relu'))
-model.add(Dense(y_train.shape[1], activation='sigmoid'))
-model.compile(loss='binary_crossentropy',
-              optimizer=Adam(0.01),
-              metrics=['categorical_accuracy'])
+# Choose model
+model = build_basic_nn(embedding_layer, y_train)
+# model = build_lstm_nn(embedding_layer, y_train)
 
 monitor = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=10, verbose=1, mode='auto')
 check_pointer = ModelCheckpoint(filepath="multi_label_best_weights.hdf5",
-                               verbose=0, save_best_only=True)  # save best model
+                                verbose=0, save_best_only=True)  # save best model
 history = model.fit(x_train, y_train, batch_size=BATCH_SIZE, validation_data=(x_val, y_val),
                     callbacks=[monitor, check_pointer], verbose=2, epochs=10)
+print(history.history.keys())
 model.load_weights('multi_label_best_weights.hdf5')  # load weights from best model
 
-predictions = model.predict(x_val)
-
-# Turn probabilities into predictions and compare with ground truth
-predicted_classes = np.argmax(predictions, axis=1)
-ground_truth = np.argmax(y_val, axis=1)
-print(f"Predictions: {predicted_classes}")
-print(f"Expected: {ground_truth}")
-
-# Calculate Accuracy
-correct = accuracy_score(ground_truth, predicted_classes)
-print(f"Accuracy: {correct}")
 
 # Plotting
 # summarize history for accuracy
@@ -159,4 +168,57 @@ plt.ylabel('loss')
 plt.xlabel('epoch')
 plt.legend(['train', 'validation'], loc='best')
 plt.show()
+
+# Turn probabilities into predictions and compare with ground truth
+predictions = model.predict(x_val)
+mask = predictions > .5
+predicted_classes = mask.astype(int)
+
+print()
+print()
+print('########### RESULTS ###########')
+
+# Dummy Accuracies
+clf_strat = DummyClassifier(strategy='stratified')
+clf_strat.fit(x_train, y_train)
+dummy_score_strat = clf_strat.score(x_val, y_val)
+print(f"Dummy (random predictor) score: {dummy_score_strat}")
+
+clf_freq = DummyClassifier(strategy='most_frequent')
+clf_freq.fit(x_train, y_train)
+dummy_score_freq = clf_freq.score(x_val, y_val)
+print(f"Dummy (most frequent predictor) score {dummy_score_freq}")
+
+# Calculate Accuracy
+jaccard_sim = jaccard_similarity_score(y_val, predicted_classes)
+prec_score_micro = precision_score(y_val, predicted_classes, average='micro')
+prec_score_macro = precision_score(y_val, predicted_classes, average='macro')
+rec_score_micro = recall_score(y_val, predicted_classes, average='micro')
+rec_score_macro = recall_score(y_val, predicted_classes, average='macro')
+f1_micro = f1_score(y_val, predicted_classes, average='micro')
+f1_macro = f1_score(y_val, predicted_classes, average='macro')
+ham_loss = hamming_loss(y_val, predicted_classes)
+
+print(f"Jaccard Similarity (accuracy): {jaccard_sim}")
+print(f"Precision Score (micro): {prec_score_micro}")
+print(f"Precision Score (macro): {prec_score_macro}")
+print(f"Recall Score (micro): {rec_score_micro}")
+print(f"Recall Score (macro): {rec_score_macro}")
+print(f"f1 Score (micro): {f1_micro}")
+print(f"f1 Score (macro): {f1_macro}")
+print(f"Hamming Loss: {ham_loss}")
+
+with open('results/combined_accuracy.txt', 'a') as f:
+    f.write(f"Jaccard Similarity (accuracy): {jaccard_sim}")
+    f.write(f"Precision Score (micro): {prec_score_micro}")
+    f.write(f"Precision Score (macro): {prec_score_macro}")
+    f.write(f"Recall Score (micro): {rec_score_micro}")
+    f.write(f"Recall Score (macro): {rec_score_macro}")
+    f.write(f"f1 Score (micro): {f1_micro}")
+    f.write(f"f1 Score (macro): {f1_macro}")
+    f.write(f"Hamming Loss: {ham_loss}")
+    f.write('\n')
+
+
+
 fill = 12
