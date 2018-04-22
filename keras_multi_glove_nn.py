@@ -4,11 +4,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import datetime
+import re
 
-from keras.preprocessing.text import Tokenizer
 from keras.preprocessing import sequence
 from keras.preprocessing.sequence import pad_sequences
-from keras.utils import to_categorical
 from keras.models import Model, Input, Sequential
 from keras.layers import Input, Dense, Embedding, GlobalMaxPooling1D, \
     Dropout, LSTM, Activation, Bidirectional, Conv1D, MaxPooling1D
@@ -22,6 +21,7 @@ from sklearn.dummy import DummyClassifier
 from sklearn.metrics import hamming_loss
 from sklearn.metrics import confusion_matrix, accuracy_score, jaccard_similarity_score, \
     classification_report, precision_score, recall_score, f1_score
+from sklearn.model_selection import train_test_split
 
 BASE_PATH = ''
 EMBEDDINGS_PATH = os.path.abspath("/Users/stevehof/school/comp/Word_Embedding_Files")
@@ -29,12 +29,59 @@ GLOVE_PATH = os.path.join(EMBEDDINGS_PATH, "glove.twitter.27B/glove.twitter.27B.
 EMBEDDING_DIMENSION = 50
 MAX_TWEET_LENGTH = 25
 MAX_VOCAB = 20000
-VALIDATION_RATIO = 0.2
 BATCH_SIZE = 64
 LEARNING_RATE = 0.001
+FLAGS = re.MULTILINE | re.DOTALL
 
 
-def jaccard_distance(y_true, y_pred, smooth=100):
+def fix_split(pattern, string):
+    splits = list((m.start(), m.end()) for m in re.finditer(pattern, string))
+    starts = [0] + [i[1] for i in splits]
+    ends = [i[0] for i in splits] + [len(string)]
+    return [string[start:end] for start, end in zip(starts, ends)]
+
+
+def hashtag(text):
+    text = text.group()
+    hashtag_body = text[1:]
+    if hashtag_body.isupper():
+        result = " {} ".format(hashtag_body.lower())
+    else:
+        result = " ".join(["<hashtag>"] + fix_split(r"(?=[A-Z])", hashtag_body))  # , flags=FLAGS))
+    return result
+
+
+def allcaps(text):
+    text = text.group()
+    return text.lower() + " <allcaps>"
+
+
+def tokenize(text):
+    # Different regex parts for smiley faces
+    eyes = r"[8:=;]"
+    nose = r"['`\-]?"
+
+    def re_sub(pattern, repl):
+        return re.sub(pattern, repl, text, flags=FLAGS)
+
+    text = re_sub(r"https?:\/\/\S+\b|www\.(\w+\.)+\S*", "<url>")
+    text = re_sub(r"@\w+", "<user>")
+    text = re_sub(r"{}{}[)dD]+|[)dD]+{}{}".format(eyes, nose, nose, eyes), "<smile>")
+    text = re_sub(r"{}{}p+".format(eyes, nose), "<lolface>")
+    text = re_sub(r"{}{}\(+|\)+{}{}".format(eyes, nose, nose, eyes), "<sadface>")
+    text = re_sub(r"{}{}[\/|l*]".format(eyes, nose), "<neutralface>")
+    text = re_sub(r"/", " / ")
+    text = re_sub(r"<3", "<heart>")
+    text = re_sub(r"[-+]?[.\d]*[\d]+[:,.\d]*", "<number>")
+    text = re_sub(r"#\S+", hashtag)
+    text = re_sub(r"([!?.]){2,}", r"\1 <repeat>")
+    text = re_sub(r"\b(\S*?)(.)\2{2,}\b", r"\1\2 <elong>")
+    text = re_sub(r"([A-Z]){2,}", allcaps)
+
+    return text.lower()
+
+
+def jaccard_distance_loss(y_true, y_pred, smooth=100):
     intersection = K.sum(K.abs(y_true * y_pred), axis=-1)
     sum_ = K.sum(K.abs(y_true) + K.abs(y_pred), axis=-1)
     jac = (intersection + smooth) / (sum_ - intersection + smooth)
@@ -61,8 +108,8 @@ def build_bi_directional_lstm_nn(embed_layer, y_train):
 def build_lstm_nn(embed_layer, y_train):
     tweet_input = Input(shape=(MAX_TWEET_LENGTH,), dtype='int32')
     embedded_tweets = embed_layer(tweet_input)
-    m = LSTM(24, activation='relu', return_sequences=True, dropout=0.0, recurrent_dropout=0.3)(embedded_tweets)
-    m = LSTM(12, activation='relu')(m)
+    m = LSTM(128, activation='relu', return_sequences=True, dropout=0.6, recurrent_dropout=0.0)(embedded_tweets)
+    m = LSTM(12, activation='relu', dropout=0.4)(m)
     output = Dense(y_train.shape[1], activation='sigmoid')(m)
     lstm_model = Model(tweet_input, output)
     lstm_model.compile(loss='binary_crossentropy',
@@ -76,9 +123,9 @@ def build_basic_nn(embed_layer, y_train):
 
     embedded_tweets = embed_layer(tweet_input)
     m = GlobalMaxPooling1D()(embedded_tweets)
-    m = Dense(12, activation='sigmoid')(m)
-    m = Dense(6, activation='relu')(m)
-    output = Dense(y_train.shape[1])(m)
+    m = Dense(128, activation='relu')(m)
+    m = Dense(12, activation='relu')(m)
+    output = Dense(y_train.shape[1], activation='sigmoid')(m)
 
     basic_model = Model(tweet_input, output)
     basic_model.compile(loss='binary_crossentropy', metrics=['categorical_accuracy'],
@@ -92,6 +139,16 @@ def add_no_emo(frame, emos):
     return frame
 
 
+def prepare_tweet_data(frame, input):
+    frame.dropna(axis=0, inplace=True)
+    frame.reset_index(drop=True, inplace=True)
+    frame[input] = frame[input].apply(tokenize)
+    emotions = frame.columns[2:]
+    labels = frame[emotions].values
+    tweets = list(frame[input].values)
+    return tweets, labels
+
+
 def main():
     embedding_index = {}
     with open(GLOVE_PATH) as f:
@@ -100,8 +157,8 @@ def main():
             word = elements[0]
             coefs = np.asarray(elements[1:], dtype=np.float32)
             embedding_index[word] = coefs
-            if index + 1 == 900:
-                break
+            # if index + 1 == 900:
+            #     break
 
     # Load Training and Validation Data, then combine frames to shuffle
     train_df = pd.read_csv('training_data/2018-E-c-En-train.txt',
@@ -109,23 +166,32 @@ def main():
                            quoting=3,
                            lineterminator='\r')
 
+
+    viewing = train_df.append(train_df.sum(numeric_only=True), ignore_index=True)
+
     val_df = pd.read_csv('training_data/2018-E-c-En-dev.txt',
+                         sep='\t',
+                         quoting=3,
+                         lineterminator='\r')
+
+    test_df = pd.read_csv('training_data/2018-E-c-En-test.txt',
                          sep='\t',
                          quoting=3,
                          lineterminator='\r')
 
     df = train_df.append(val_df, ignore_index=True)
 
-    # Clean up training data
+    # Clean up data
     df.dropna(axis=0, inplace=True)
     df.reset_index(drop=True, inplace=True)
+    df['Tweet'] = df['Tweet'].apply(tokenize)
     emotions = train_df.columns[2:]
-    df = add_no_emo(df, emotions)
-    emotions = df.columns[2:]
+    # df = add_no_emo(df, emotions)
+    # emotions = df.columns[2:]
 
     # Turn tweets into 2D integer tensors
     tweets = list(df['Tweet'].values)
-    tokenizer = Tokenizer(num_words=MAX_VOCAB)
+    tokenizer = Tokenizer(num_words=MAX_VOCAB, filters='!"$%&()*+,-./:;?@[\]^_`{|}~')
     tokenizer.fit_on_texts(tweets)
     sequences = tokenizer.texts_to_sequences(tweets)
     word_index = tokenizer.word_index
@@ -139,16 +205,17 @@ def main():
     print(f'Shape of label tensor: {labels.shape}')
 
     # split the data into a training set and a validation set
-    indices = np.arange(data.shape[0])
-    np.random.shuffle(indices)
-    data = data[indices]
-    labels = labels[indices]
-    num_validation_samples = int(VALIDATION_RATIO * data.shape[0])
-
-    x_train = data[:-num_validation_samples]
-    y_train = labels[:-num_validation_samples]
-    x_val = data[-num_validation_samples:]
-    y_val = labels[-num_validation_samples:]
+    x_train, x_val, y_train, y_val = train_test_split(data, labels, test_size=0.3)
+    # indices = np.arange(data.shape[0])
+    # np.random.shuffle(indices)
+    # data = data[indices]
+    # labels = labels[indices]
+    # num_validation_samples = int(VALIDATION_RATIO * data.shape[0])
+    #
+    # x_train = data[:-num_validation_samples]
+    # y_train = labels[:-num_validation_samples]
+    # x_val = data[-num_validation_samples:]
+    # y_val = labels[-num_validation_samples:]
 
     print('Preparing embedding matrix....')
 
@@ -172,49 +239,53 @@ def main():
     print('Training model...')
     # Choose model
     # model = build_basic_nn(embedding_layer, y_train)
-    # model = build_lstm_nn(embedding_layer, y_train)
-    model = build_bi_directional_lstm_nn(embedding_layer, y_train)
+    model = build_lstm_nn(embedding_layer, y_train)
+    # model = build_bi_directional_lstm_nn(embedding_layer, y_train)
 
-    monitor = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=10, verbose=1, mode='min')
+    monitor = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=75, verbose=1, mode='min')
 
     check_pointer = ModelCheckpoint(filepath="multi_label_best_weights.hdf5",
                                     verbose=0, save_best_only=True)  # save best model
 
     history = model.fit(x_train, y_train, batch_size=BATCH_SIZE, validation_data=(x_val, y_val),
-                        callbacks=[monitor, check_pointer], verbose=2, epochs=40)
-
-    print(history.history.keys())
+                        callbacks=[monitor, check_pointer], verbose=2, epochs=300)
+    #
+    # history = model.fit(x_train, y_train, batch_size=BATCH_SIZE, validation_data=(x_val, y_val),
+    #                     verbose=2, epochs=300)
+    # print(history.history.keys())
     model.load_weights('multi_label_best_weights.hdf5')  # load weights from best model
 
     # Plotting
     # summarize history for accuracy
-    # plt.plot(history.history['categorical_accuracy'])
-    # plt.plot(history.history['val_categorical_accuracy'])
-    # plt.title('model accuracy')
-    # plt.ylabel('accuracy')
-    # plt.xlabel('epoch')
-    # plt.legend(['train', 'validation'], loc='best')
-    # timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    # plot_acc_file = 'plots/model_accuracy' + timestamp + '.eps'
-    # plt.savefig(plot_acc_file, format='eps', dpi=1000)
-    #
-    # plt.show()
-    #
-    # # summarize history for loss
-    # plt.plot(history.history['loss'])
-    # plt.plot(history.history['val_loss'])
-    # plt.title('model loss')
-    # plt.ylabel('loss')
-    # plt.xlabel('epoch')
-    # plt.legend(['train', 'validation'], loc='best')
-    # plot_loss_file = 'plots/model_loss' + timestamp + '.eps'
-    # plt.savefig(plot_loss_file, format='eps', dpi=1000)
-    # plt.show()
+    plt.plot(history.history['categorical_accuracy'])
+    plt.plot(history.history['val_categorical_accuracy'])
+    plt.title('Feed Forward Categorical Accuracy per Epoch')
+    plt.ylabel('accuracy')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'validation'], loc='best')
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    plot_acc_file = 'plots/model_accuracy' + timestamp + '.eps'
+    plt.savefig(plot_acc_file, format='eps', dpi=1000)
+
+    plt.show()
+
+    # summarize history for loss
+    plt.plot(history.history['loss'])
+    plt.plot(history.history['val_loss'])
+    plt.title('Feed Forward Categorical Loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'validation'], loc='best')
+    plot_loss_file = 'plots/model_loss' + timestamp + '.eps'
+    plt.savefig(plot_loss_file, format='eps', dpi=1000)
+    plt.show()
 
     # Turn probabilities into predictions and compare with ground truth
     predictions = model.predict(x_val)
-    mask = predictions > .5
+    mask = predictions > .2
     predicted_classes = mask.astype(int)
+    print(f"Predicted Results:")
+    print(f"{predicted_classes}")
 
     print()
     print()
@@ -256,7 +327,8 @@ def main():
 
     with open('results/combined_accuracy.txt', 'a') as f:
         f.write(f"\nRun at {timestamp}\n")
-        f.write("Basic Model: Global Max Pooling + 2 LSTM, 24-relu (d/o=0.3) then 12-relu, 40 epochs\n")
+        # f.write("Basic Model: 50d embeds, 2 LSTM, 128-relu (d/o=0.6), 12-relu (d/o=0.4), 200 epochs, LR=.001, (cleaned tweets), (bin_c_e), no-no_emo_class, threshold=0.2\n")
+        f.write("Feed Forward Model: 50d embeds, 2 Dense, 128-relu, 12-relu, 200 epochs")
         f.write(f"Jaccard Similarity (accuracy): {jaccard_sim}\n")
         f.write(f"Classification Report:\n {class_report}\n")
         f.write(f"Precision Score (micro): {prec_score_micro}\n")
@@ -267,6 +339,20 @@ def main():
         f.write(f"f1 Score (macro): {f1_macro}\n")
         f.write(f"Hamming Loss: {ham_loss}\n")
         f.write('\n')
+
+
+    # test_tweets, test_labels = prepare_tweet_data(test_df, 'Tweet')
+    # test_sequences = tokenizer.texts_to_sequences(test_tweets)
+    # test_data = pad_sequences(test_sequences, maxlen=MAX_TWEET_LENGTH)
+    # for i in range(5):
+    #     proba = model.predict(test_sequences[i])
+    #     test_mask = proba > 0.2
+    #     pred = test_mask.astype(int)
+    #     print(test_tweets[i])
+    #     print(f"Prediction:\n{pred}")
+    #     print(f"Truth:\n{test_labels[i]}")
+
+
 
     fill = 12
 
