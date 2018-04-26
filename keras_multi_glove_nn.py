@@ -8,7 +8,7 @@ import re
 
 from keras.preprocessing import sequence
 from keras.preprocessing.sequence import pad_sequences
-from keras.models import Model, Input, Sequential
+from keras.models import Model, Sequential
 from keras.layers import Input, Dense, Embedding, GlobalMaxPooling1D, \
     Dropout, LSTM, Activation, Bidirectional, Conv1D, MaxPooling1D
 from keras.preprocessing.text import Tokenizer
@@ -108,7 +108,7 @@ def build_bi_directional_lstm_nn(embed_layer, y_train):
 def build_lstm_nn(embed_layer, y_train):
     tweet_input = Input(shape=(MAX_TWEET_LENGTH,), dtype='int32')
     embedded_tweets = embed_layer(tweet_input)
-    m = LSTM(128, activation='relu', return_sequences=True, dropout=0.6, recurrent_dropout=0.0)(embedded_tweets)
+    m = LSTM(24, activation='relu', return_sequences=True, dropout=0.6, recurrent_dropout=0.0)(embedded_tweets)
     m = LSTM(12, activation='relu', dropout=0.4)(m)
     output = Dense(y_train.shape[1], activation='sigmoid')(m)
     lstm_model = Model(tweet_input, output)
@@ -123,7 +123,7 @@ def build_basic_nn(embed_layer, y_train):
 
     embedded_tweets = embed_layer(tweet_input)
     m = GlobalMaxPooling1D()(embedded_tweets)
-    m = Dense(128, activation='relu')(m)
+    m = Dense(24, activation='relu')(m)
     m = Dense(12, activation='relu')(m)
     output = Dense(y_train.shape[1], activation='sigmoid')(m)
 
@@ -157,8 +157,8 @@ def main():
             word = elements[0]
             coefs = np.asarray(elements[1:], dtype=np.float32)
             embedding_index[word] = coefs
-            # if index + 1 == 900:
-            #     break
+            if index + 1 == 900:
+                break
 
     # Load Training and Validation Data, then combine frames to shuffle
     train_df = pd.read_csv('training_data/2018-E-c-En-train.txt',
@@ -242,24 +242,24 @@ def main():
     model = build_lstm_nn(embedding_layer, y_train)
     # model = build_bi_directional_lstm_nn(embedding_layer, y_train)
 
-    monitor = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=75, verbose=1, mode='min')
-
-    check_pointer = ModelCheckpoint(filepath="multi_label_best_weights.hdf5",
-                                    verbose=0, save_best_only=True)  # save best model
-
-    history = model.fit(x_train, y_train, batch_size=BATCH_SIZE, validation_data=(x_val, y_val),
-                        callbacks=[monitor, check_pointer], verbose=2, epochs=300)
+    # monitor = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=75, verbose=1, mode='min')
+    #
+    # check_pointer = ModelCheckpoint(filepath="multi_label_best_weights.hdf5",
+    #                                 verbose=0, save_best_only=True)  # save best model
     #
     # history = model.fit(x_train, y_train, batch_size=BATCH_SIZE, validation_data=(x_val, y_val),
-    #                     verbose=2, epochs=300)
+    #                     callbacks=[monitor, check_pointer], verbose=2, epochs=200)
+    #
+    history = model.fit(x_train, y_train, batch_size=BATCH_SIZE, validation_data=(x_val, y_val),
+                        verbose=2, epochs=100)
     # print(history.history.keys())
-    model.load_weights('multi_label_best_weights.hdf5')  # load weights from best model
+    # model.load_weights('multi_label_best_weights.hdf5')  # load weights from best model
 
     # Plotting
     # summarize history for accuracy
     plt.plot(history.history['categorical_accuracy'])
     plt.plot(history.history['val_categorical_accuracy'])
-    plt.title('Feed Forward Categorical Accuracy per Epoch')
+    plt.title('LSTM Categorical Accuracy per Epoch')
     plt.ylabel('accuracy')
     plt.xlabel('epoch')
     plt.legend(['train', 'validation'], loc='best')

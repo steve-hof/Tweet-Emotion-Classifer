@@ -10,7 +10,9 @@ Created on Mon Jan 22 11:47:23 2018
 import numpy as np
 import pandas as pd
 from sklearn.naive_bayes import GaussianNB, MultinomialNB, BernoulliNB
+from sklearn import svm
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import Perceptron, LogisticRegression
 from sklearn.metrics import f1_score
@@ -84,17 +86,19 @@ for name, data in labels.items():
     emotion_list.append(Emotion(name, data))
 
 # For each emotion, split the df into the Training set and Test set and run algorithms
-with open('tweet_accuracy.txt', 'w') as f:
+with open('tweet_accuracy_further.txt', 'w') as f:
     for emotion in emotion_list:
         print(f"Classification accuracy for {emotion.get_name()}", file=f)
         X_train, X_test, y_train, y_test = train_test_split(X, emotion.get_data(), test_size=0.2, random_state=0)
 
         # Run through each classifier, train on X_train and y_train and the test them using the score function
         algs = [
-            GaussianNB(),
-            MultinomialNB(),
-            BernoulliNB(),
-            LogisticRegression()
+            svm.SVC(),
+            RandomForestClassifier()
+            # GaussianNB(),
+            # MultinomialNB(),
+            # BernoulliNB(),
+            # LogisticRegression()
         ]
 
         for alg in algs:

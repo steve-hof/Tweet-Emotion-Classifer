@@ -6,7 +6,7 @@ import scikitplot as skplt
 
 from sklearn.neural_network import MLPClassifier
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, learning_curve, ShuffleSplit
 from sklearn.metrics import accuracy_score, jaccard_similarity_score, \
     classification_report, precision_score, recall_score, f1_score
 from sklearn.tree import DecisionTreeClassifier
@@ -64,46 +64,51 @@ def tokenize(text):
     return text.lower()
 
 
-#### USING OTHER DATA SET ####
-df_6 = pd.read_csv('training_data/text_emotion.csv')
-df_6 = df_6[['sentiment', 'content']]
-emotion_new_list = df_6.sentiment.unique()
-counts = df_6['sentiment'].value_counts()
-# Only use top 6 emotions
-keep_cols = ['neutral', 'worry', 'happiness', 'sadness', 'love', 'surprise']
-drop_cols = ['anger', 'boredom', 'enthusiasm', 'empty', 'hate', 'relief', 'fun']
-df_6 = df_6[df_6['sentiment'].isin(keep_cols)]
-dummy_df_6 = pd.get_dummies(df_6['sentiment'])
-df_6 = pd.concat([df_6, dummy_df_6], axis=1)
-df_6.drop(df_6.columns[0], axis=1, inplace=True)
+"""
+Generate a simple plot of the test and training learning curve.
 
-df_6['content'] = df_6['content'].apply(tokenize)
-emotions = df_6.columns[1:]
-tweets = df_6['content'].values
-labels = df_6[emotions].values
-fill = 12
-##############################
-# train_df = pd.read_csv('training_data/2018-E-c-En-train.txt',
-#                        sep='\t',
-#                        quoting=3,
-#                        lineterminator='\r')
-#
-# val_df = pd.read_csv('training_data/2018-E-c-En-dev.txt',
-#                      sep='\t',
-#                      quoting=3,
-#                      lineterminator='\r')
-#
-# df = train_df.append(val_df, ignore_index=True)
-#
-# # Clean up training data
-# df.dropna(axis=0, inplace=True)
-# df.reset_index(drop=True, inplace=True)
-# df['Tweet'] = df['Tweet'].apply(tokenize)
-# emotions = df.columns[2:]
-#
-# tweets = df['Tweet'].values
-# labels = df[emotions].values
-#
+Parameters
+----------
+estimator : object type that implements the "fit" and "predict" methods
+    An object of that type which is cloned for each validation.
+
+title : string
+    Title for the chart.
+
+X : array-like, shape (n_samples, n_features)
+    Training vector, where n_samples is the number of samples and
+    n_features is the number of features.
+
+y : array-like, shape (n_samples) or (n_samples, n_features), optional
+    Target relative to X for classification or regression;
+    None for unsupervised learning.
+
+ylim : tuple, shape (ymin, ymax), optional
+    Defines minimum and maximum yvalues plotted.
+"""
+
+
+train_df = pd.read_csv('training_data/2018-E-c-En-train.txt',
+                       sep='\t',
+                       quoting=3,
+                       lineterminator='\r')
+
+val_df = pd.read_csv('training_data/2018-E-c-En-dev.txt',
+                     sep='\t',
+                     quoting=3,
+                     lineterminator='\r')
+
+df = train_df.append(val_df, ignore_index=True)
+
+# Clean up training data
+df.dropna(axis=0, inplace=True)
+df.reset_index(drop=True, inplace=True)
+df['Tweet'] = df['Tweet'].apply(tokenize)
+emotions = df.columns[2:]
+
+tweets = df['Tweet'].values
+labels = df[emotions].values
+
 cv = CountVectorizer()
 x_tokens = cv.fit_transform(tweets)
 print(f"Input shape: {x_tokens.shape}")
@@ -111,8 +116,8 @@ print(f"Input shape: {x_tokens.shape}")
 x_train, x_val, y_train, y_val = train_test_split(x_tokens, labels,
                                                   test_size=0.4)
 
-# Suitable classifier models (uncomment the one you'd like to use)
-clf = MLPClassifier()
+# Suitable classifier models
+clf = MLPClassifier(hidden_layer_sizes=(10,), max_iter=200)
 # clf = KNeighborsClassifier()
 # clf = DecisionTreeClassifier()
 # clf = RandomForestClassifier()
@@ -139,6 +144,8 @@ print(f"Recall Score (macro): {rec_score_macro}")
 print(f"f1 Score (micro): {f1_micro}")
 print(f"f1 Score (macro): {f1_macro}")
 
+title = 'MLP Accuracy per Epoch'
+
 with open('results/combined_accuracy.txt', 'a') as f:
     f.write("\nBasic Model: Sklearn MLP (other dataset- multiclass)\n")
     f.write(f"Jaccard Similarity (accuracy): {jaccard_sim}\n")
@@ -152,6 +159,5 @@ with open('results/combined_accuracy.txt', 'a') as f:
     f.write('\n')
 
 print(f"Accuracy Score: {accuracy_score(y_val, predicted)}")
-
 
 fill = 12
