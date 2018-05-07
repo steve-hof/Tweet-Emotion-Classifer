@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+
+"""
+This script preprocesses the tweet data similarily to preprocess_tf_binary.py
+
+It uses the same script for processing hashtags, emojis and usernames
+(found at https://gist.github.com/tokestermw/cb87a97113da12acb388)
+
+It then uses the Keras API to build either a bi-directional, feed forward,
+lstm or convolutional neural network.
+
+It then trains, tests, and reports metrics for the multi-label classification
+"""
+
 import os
 import numpy as np
 import pandas as pd
@@ -132,24 +145,15 @@ def build_basic_nn(embed_layer, y_train):
                         optimizer=Adam(LEARNING_RATE))
     return basic_model
 
-
+# to experiment with specifically classifying neutral tweets (not used for final results)
 def add_no_emo(frame, emos):
     frame['no_emotion'] = frame[emos].sum(axis=1)
     frame['no_emotion'] = np.where(frame['no_emotion'] == 0, 1, 0)
     return frame
 
 
-def prepare_tweet_data(frame, input):
-    frame.dropna(axis=0, inplace=True)
-    frame.reset_index(drop=True, inplace=True)
-    frame[input] = frame[input].apply(tokenize)
-    emotions = frame.columns[2:]
-    labels = frame[emotions].values
-    tweets = list(frame[input].values)
-    return tweets, labels
-
-
 def main():
+    # build dictionary from glove embeddings .txt file
     embedding_index = {}
     with open(GLOVE_PATH) as f:
         for index, line in enumerate(f):
@@ -160,14 +164,11 @@ def main():
             if index + 1 == 900:
                 break
 
-    # Load Training and Validation Data, then combine frames to shuffle
+    # load Training and Validation Data, then combine frames to shuffle
     train_df = pd.read_csv('training_data/2018-E-c-En-train.txt',
                            sep='\t',
                            quoting=3,
                            lineterminator='\r')
-
-
-    viewing = train_df.append(train_df.sum(numeric_only=True), ignore_index=True)
 
     val_df = pd.read_csv('training_data/2018-E-c-En-dev.txt',
                          sep='\t',
@@ -175,9 +176,9 @@ def main():
                          lineterminator='\r')
 
     test_df = pd.read_csv('training_data/2018-E-c-En-test.txt',
-                         sep='\t',
-                         quoting=3,
-                         lineterminator='\r')
+                          sep='\t',
+                          quoting=3,
+                          lineterminator='\r')
 
     df = train_df.append(val_df, ignore_index=True)
 
@@ -186,10 +187,8 @@ def main():
     df.reset_index(drop=True, inplace=True)
     df['Tweet'] = df['Tweet'].apply(tokenize)
     emotions = train_df.columns[2:]
-    # df = add_no_emo(df, emotions)
-    # emotions = df.columns[2:]
 
-    # Turn tweets into 2D integer tensors
+    # turn tweets into 2D integer tensors
     tweets = list(df['Tweet'].values)
     tokenizer = Tokenizer(num_words=MAX_VOCAB, filters='!"$%&()*+,-./:;?@[\]^_`{|}~')
     tokenizer.fit_on_texts(tweets)
@@ -206,20 +205,10 @@ def main():
 
     # split the data into a training set and a validation set
     x_train, x_val, y_train, y_val = train_test_split(data, labels, test_size=0.3)
-    # indices = np.arange(data.shape[0])
-    # np.random.shuffle(indices)
-    # data = data[indices]
-    # labels = labels[indices]
-    # num_validation_samples = int(VALIDATION_RATIO * data.shape[0])
-    #
-    # x_train = data[:-num_validation_samples]
-    # y_train = labels[:-num_validation_samples]
-    # x_val = data[-num_validation_samples:]
-    # y_val = labels[-num_validation_samples:]
-
-    print('Preparing embedding matrix....')
 
     # prepare embedding matrix
+    print('Preparing embedding matrix....')
+
     num_words = min(MAX_VOCAB, len(word_index) + 1)
     embedding_matrix = np.zeros((num_words, EMBEDDING_DIMENSION))
     for word, i in word_index.items():
@@ -236,30 +225,33 @@ def main():
                                 input_length=MAX_TWEET_LENGTH,
                                 trainable=False)
 
-    print('Training model...')
-    # Choose model
-    # model = build_basic_nn(embedding_layer, y_train)
-    model = build_lstm_nn(embedding_layer, y_train)
+    # Choose Model
+    model = build_basic_nn(embedding_layer, y_train)
+    # model = build_lstm_nn(embedding_layer, y_train)
     # model = build_bi_directional_lstm_nn(embedding_layer, y_train)
 
-    # monitor = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=75, verbose=1, mode='min')
-    #
-    # check_pointer = ModelCheckpoint(filepath="multi_label_best_weights.hdf5",
-    #                                 verbose=0, save_best_only=True)  # save best model
-    #
-    # history = model.fit(x_train, y_train, batch_size=BATCH_SIZE, validation_data=(x_val, y_val),
-    #                     callbacks=[monitor, check_pointer], verbose=2, epochs=200)
-    #
+    # uncomment to to make use of 'early stopping'
+    """
+    monitor = EarlyStopping(monitor='val_loss', min_delta=1e-3, patience=75, verbose=1, mode='min')
+
+    check_pointer = ModelCheckpoint(filepath="multi_label_best_weights.hdf5",
+                                    verbose=0, save_best_only=True)  # save best model
+
+    history = model.fit(x_train, y_train, batch_size=BATCH_SIZE, validation_data=(x_val, y_val),
+                        callbacks=[monitor, check_pointer], verbose=2, epochs=200)
+    """
+
+    # fit model to training data and record learning curve info for training and testing scores
     history = model.fit(x_train, y_train, batch_size=BATCH_SIZE, validation_data=(x_val, y_val),
                         verbose=2, epochs=100)
-    # print(history.history.keys())
+
+    # only use if early stopping is enabled
     # model.load_weights('multi_label_best_weights.hdf5')  # load weights from best model
 
-    # Plotting
-    # summarize history for accuracy
+    # plot accuracy learning curves
     plt.plot(history.history['categorical_accuracy'])
     plt.plot(history.history['val_categorical_accuracy'])
-    plt.title('LSTM Categorical Accuracy per Epoch')
+    plt.title('Categorical Accuracy per Epoch')
     plt.ylabel('accuracy')
     plt.xlabel('epoch')
     plt.legend(['train', 'validation'], loc='best')
@@ -269,7 +261,7 @@ def main():
 
     plt.show()
 
-    # summarize history for loss
+    # plot loss learning curves
     plt.plot(history.history['loss'])
     plt.plot(history.history['val_loss'])
     plt.title('Feed Forward Categorical Loss')
@@ -291,19 +283,19 @@ def main():
     print()
     print('########### RESULTS ###########')
 
-    # Dummy Accuracies
+    # dummy classifier that chooses randomly
     clf_strat = DummyClassifier(strategy='stratified')
     clf_strat.fit(x_train, y_train)
     dummy_score_strat = clf_strat.score(x_val, y_val)
     print(f"Dummy (random predictor) score: {dummy_score_strat}")
 
+    # dummy classifier that chooses the most frequent label
     clf_freq = DummyClassifier(strategy='most_frequent')
     clf_freq.fit(x_train, y_train)
     most_freq = np.zeros_like(predicted_classes)
     print(f"Dummy (most frequent predictor) score {jaccard_similarity_score(y_val, most_freq)}")
 
-    # Calculate Accuracy
-    # print(f"\nPredicted Classes: \n {predicted_classes}")
+    # calculate various metrics
     print("\nActual Accuracies:")
     jaccard_sim = jaccard_similarity_score(y_val, predicted_classes)
     prec_score_micro = precision_score(y_val, predicted_classes, average='micro')
@@ -315,6 +307,7 @@ def main():
     ham_loss = hamming_loss(y_val, predicted_classes)
     class_report = classification_report(y_val, predicted_classes, target_names=emotions)
 
+    # print accuracies
     print(f"Jaccard Similarity (accuracy): {jaccard_sim}")
     print(f"Classification Report: \n{class_report}")
     print(f"Precision Score (micro): {prec_score_micro}")
@@ -324,37 +317,6 @@ def main():
     print(f"f1 Score (micro): {f1_micro}")
     print(f"f1 Score (macro): {f1_macro}")
     print(f"Hamming Loss: {ham_loss}")
-
-    with open('results/combined_accuracy.txt', 'a') as f:
-        f.write(f"\nRun at {timestamp}\n")
-        # f.write("Basic Model: 50d embeds, 2 LSTM, 128-relu (d/o=0.6), 12-relu (d/o=0.4), 200 epochs, LR=.001, (cleaned tweets), (bin_c_e), no-no_emo_class, threshold=0.2\n")
-        f.write("Feed Forward Model: 50d embeds, 2 Dense, 128-relu, 12-relu, 200 epochs")
-        f.write(f"Jaccard Similarity (accuracy): {jaccard_sim}\n")
-        f.write(f"Classification Report:\n {class_report}\n")
-        f.write(f"Precision Score (micro): {prec_score_micro}\n")
-        f.write(f"Precision Score (macro): {prec_score_macro}\n")
-        f.write(f"Recall Score (micro): {rec_score_micro}\n")
-        f.write(f"Recall Score (macro): {rec_score_macro}\n")
-        f.write(f"f1 Score (micro): {f1_micro}\n")
-        f.write(f"f1 Score (macro): {f1_macro}\n")
-        f.write(f"Hamming Loss: {ham_loss}\n")
-        f.write('\n')
-
-
-    # test_tweets, test_labels = prepare_tweet_data(test_df, 'Tweet')
-    # test_sequences = tokenizer.texts_to_sequences(test_tweets)
-    # test_data = pad_sequences(test_sequences, maxlen=MAX_TWEET_LENGTH)
-    # for i in range(5):
-    #     proba = model.predict(test_sequences[i])
-    #     test_mask = proba > 0.2
-    #     pred = test_mask.astype(int)
-    #     print(test_tweets[i])
-    #     print(f"Prediction:\n{pred}")
-    #     print(f"Truth:\n{test_labels[i]}")
-
-
-
-    fill = 12
 
 
 if __name__ == '__main__':

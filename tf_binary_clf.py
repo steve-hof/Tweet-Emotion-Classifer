@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
 
+"""
+This script preprocesses the tweet data similarily to preprocess_tf_binary.py
+
+It uses the same script for processing hashtags, emojis and usernames
+(found at https://gist.github.com/tokestermw/cb87a97113da12acb388)
+
+It then uses the Tensorflow API to build and execute an LSTM neural network
+with options for a variety of parameters including number of neurons per layer
+and number of layers in the graph.
+
+"""
 import numpy as np
 import os
 import pickle
@@ -19,7 +30,7 @@ DROPOUT_KEEP_PROB = .75
 # NUM_STEPS = 35
 GLOVE_LIMIT = 20000
 
-# Next tweak: either raise dropout or lower learning rate
+# hyper-parameter options
 hyp_str = "nLST-" + str(LSTM_UNITS) + "lr-" + str(LEARNING_RATE) + \
           "n_hid-" + str(NUM_HIDDEN) + \
           "d_Prob-" + str(DROPOUT_KEEP_PROB) + \
@@ -68,31 +79,31 @@ def main():
 
     tf.reset_default_graph()
 
-    # Set up placeholders for input and labels
-    with tf.name_scope("Labels"): # as scope:
+    # set up placeholders for input and labels
+    with tf.name_scope("Labels"):  # as scope:
         labels = tf.placeholder(tf.float32, [BATCH_SIZE, NUM_CLASSES])
-    with tf.name_scope("Input"): # as scope:
+    with tf.name_scope("Input"):  # as scope:
         input_data = tf.placeholder(tf.int32, [BATCH_SIZE, MAX_TWEET_LENGTH])
 
-    # Get embedding vector
-    with tf.name_scope("Embeds_Layer"): # as scope:
+    # get embedding vector
+    with tf.name_scope("Embeds_Layer"):  # as scope:
         embedding = tf.Variable(tf.zeros([len(weights), EMBEDDING_DIMENSION]), dtype=tf.float32,
                                 name='embedding')
         embed = tf.nn.embedding_lookup(embedding, input_data)  # maybe change 'embedding back to 'weights'
 
-    # Set up LSTM cell then wrap cell in dropout layer to avoid over fitting
-    with tf.name_scope("LSTM_Cell"): # as scope:
+    # set up LSTM cell then wrap cell in dropout layer to avoid over fitting
+    with tf.name_scope("LSTM_Cell"):  # as scope:
         lstm_cell = tf.contrib.rnn.BasicLSTMCell(LSTM_UNITS)
         lstm_cell = tf.contrib.rnn.DropoutWrapper(cell=lstm_cell, output_keep_prob=DROPOUT_KEEP_PROB)
         stacked_lstm = tf.contrib.rnn.MultiRNNCell([lstm_cell for _ in range(NUM_HIDDEN)], state_is_tuple=True)
         initial_state = stacked_lstm.zero_state(BATCH_SIZE, dtype=tf.float32)
 
-    with tf.name_scope("RNN_Forward"): # as scope:
+    with tf.name_scope("RNN_Forward"):  # as scope:
         value, state = tf.nn.dynamic_rnn(stacked_lstm, embed,
                                          initial_state=initial_state,
                                          dtype=tf.float32, time_major=False)
 
-    with tf.name_scope("Fully_Connected"): # as scope:
+    with tf.name_scope("Fully_Connected"):  # as scope:
         weight = tf.Variable(tf.truncated_normal([LSTM_UNITS, NUM_CLASSES]), name='weights')
         bias = tf.Variable(tf.constant(0.1, shape=[NUM_CLASSES]), name='bias')
         value = tf.transpose(value, [1, 0, 2], name='last_lstm')
@@ -100,44 +111,44 @@ def main():
         tf.summary.histogram("weights", weight)
         tf.summary.histogram("biases", bias)
 
-    with tf.name_scope("Predictions"): # as scope:
+    with tf.name_scope("Predictions"):  # as scope:
         prediction = (tf.matmul(last, weight) + bias)
 
     # Cross entropy loss with a softmax layer on top
     # Using Adam for optimizer
-    with tf.name_scope("Loss_and_Accuracy"): # as scope:
+    with tf.name_scope("Loss_and_Accuracy"):  # as scope:
         correct_pred = tf.equal(tf.argmax(prediction, 1), tf.argmax(labels, 1))
         accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
         loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=labels))
 
-    with tf.name_scope("Training"): # as scope:
+    with tf.name_scope("Training"):  # as scope:
         optimizer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE).minimize(loss)
 
     sess = tf.InteractiveSession()
     saver = tf.train.Saver()
     sess.run(tf.global_variables_initializer())
 
-    # Output directory for models and summaries
+    # output directory for models and summaries
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     name = hyp_str + timestamp
     logdir = os.path.abspath(os.path.join(os.path.curdir, "temp_50d/tboard", name))
     print(f"Writing to {logdir}")
 
-    # Summaries for loss and accuracy
+    # summaries for loss and accuracy
     acc_summary = tf.summary.scalar('Accuracy', accuracy)
     loss_summary = tf.summary.scalar('Loss', loss)
 
-    # Training summaries
+    # training summaries
     train_summary_dir = os.path.join(logdir, "summaries", "train")
     train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph)
 
-    # Testing summaries
+    # testing summaries
     test_summary_dir = os.path.join(logdir, "summaries", "test")
     test_summary_writer = tf.summary.FileWriter(test_summary_dir, sess.graph)
 
     summary_op = tf.summary.merge_all()
 
-    # Checkpointing
+    # checkpointing
     checkpoint_dir = os.path.abspath(os.path.join(logdir, "checkpoints"))
 
     # checkpoint_prefix = os.path.join(checkpoint_dir, "model")
@@ -160,7 +171,7 @@ def main():
             test_summary_writer.add_summary(testSummary, i)
             test_summary_writer.flush()
 
-        # Save network every so often
+        # save network every so often
         if i % 1000 == 0 and i != 0:
             save_path = saver.save(sess, f"temp_50d/models/_pretrained_lstm.ckpt", global_step=i)
             print(f"saved to {save_path}")
