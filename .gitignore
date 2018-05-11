@@ -74,7 +74,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
-
+*.ipynb
 # tensorboard stuff
 tensorboard/
 results/
@@ -111,5 +111,16 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-# training_data
+# data
 training_data/
+data/
+figures/
+scraped_data/
+
+# certain files and folders
+setup.py
+vendor/
+nba-api/
+NBAapi
+MANIFEST.in
+composer*
